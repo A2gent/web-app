@@ -45,7 +45,7 @@ const Sidebar: React.FC = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
               }}
-              onClick={() => item.subItems ? toggleExpand(item.id) : console.log(\`Navigating to \${item.path}\`)}
+              onClick={() => item.subItems ? toggleExpand(item.id) : console.log(`Navigating to ${item.path}`)}
             >
               {item.label}
               {item.subItems && (
