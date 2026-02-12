@@ -2,9 +2,10 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface ChatInputProps {
   onSend?: (message: string) => void;
+  disabled?: boolean;
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSend, disabled = false }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
   const [value, setValue] = useState('');
@@ -90,6 +91,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
   };
 
   const handleSend = () => {
+    if (disabled) return;
     const messageToSend = value.trim();
     if (messageToSend && onSend) {
       onSend(messageToSend);
@@ -125,8 +127,9 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
         value={displayValue}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder="Start a new chat..."
+        placeholder={disabled ? "Agent is processing..." : "Start a new chat..."}
         rows={1}
+        disabled={disabled}
       />
       <div className="chat-input-actions">
         {isSupported && (
@@ -152,7 +155,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
           type="button"
           className="send-button"
           onClick={handleSend}
-          disabled={!value.trim() && !interimTranscript}
+          disabled={disabled || (!value.trim() && !interimTranscript)}
           title="Send message"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" className="send-icon">

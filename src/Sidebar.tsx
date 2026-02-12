@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
+import type { Session } from './api';
 
 interface NavItem {
   id: string;
   label: string;
   path: string;
   subItems?: NavItem[];
+}
+
+interface SidebarProps {
+  sessions: Session[];
+  currentSessionId?: string;
+  onSelectSession: (sessionId: string) => void;
+  onCreateSession: () => void;
+  onDeleteSession: (sessionId: string) => void;
 }
 
 const navItems: NavItem[] = [
@@ -15,6 +24,7 @@ const navItems: NavItem[] = [
     label: 'Agent',
     path: '/agent',
     subItems: [
+      { id: 'persona', label: 'Persona', path: '/agent/persona' },
       { id: 'thoughts', label: 'Thoughts', path: '/agent/thoughts' },
       { id: 'jobs', label: 'Recurring jobs', path: '/agent/jobs' },
       { id: 'datasources', label: 'Datasources', path: '/agent/datasources' },
@@ -22,11 +32,41 @@ const navItems: NavItem[] = [
   },
 ];
 
-const Sidebar: React.FC = () => {
-  const [expandedItem, setExpandedItem] = useState<string | null>('agent'); // 'agent' expanded by default for demo
+const Sidebar: React.FC<SidebarProps> = ({ 
+  sessions, 
+  currentSessionId, 
+  onSelectSession, 
+  onCreateSession,
+  onDeleteSession 
+}) => {
+  const [expandedItem, setExpandedItem] = useState<string | null>('sessions');
 
   const toggleExpand = (itemId: string) => {
     setExpandedItem(expandedItem === itemId ? null : itemId);
+  };
+
+  const formatSessionTitle = (session: Session) => {
+    if (session.title) {
+      return session.title.length > 25 
+        ? session.title.substring(0, 25) + '...' 
+        : session.title;
+    }
+    return `Session ${session.id.substring(0, 8)}`;
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   };
 
   const renderNavItems = (items: NavItem[], isSub?: boolean) => {
@@ -64,19 +104,78 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <div style={{ 
-        width: '250px', 
-        backgroundColor: '#242424', 
-        color: 'white', 
-        height: '100vh', 
-        padding: '20px 10px', 
-        boxSizing: 'border-box', 
-        borderRight: '1px solid #333'
-    }}>
-      <h2 style={{ borderBottom: '1px solid #333', paddingBottom: '15px', marginTop: '0', fontSize: '1.5em', textAlign: 'center' }}>A2gent App</h2>
-      <nav>
-        {renderNavItems(navItems)}
-      </nav>
+    <div className="sidebar">
+      <h2 className="sidebar-title">A2gent</h2>
+      
+      {/* Sessions Section */}
+      <div className="sidebar-section">
+        <div 
+          className="sidebar-section-header"
+          onClick={() => toggleExpand('sessions')}
+        >
+          <span>Sessions</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button 
+              className="new-session-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCreateSession();
+              }}
+              title="New Session"
+            >
+              +
+            </button>
+            <span style={{ fontSize: '12px' }}>
+              {expandedItem === 'sessions' ? '▼' : '▶'}
+            </span>
+          </div>
+        </div>
+        
+        {expandedItem === 'sessions' && (
+          <ul className="session-list">
+            {sessions.length === 0 ? (
+              <li className="session-item empty">No sessions yet</li>
+            ) : (
+              sessions.map(session => (
+                <li 
+                  key={session.id} 
+                  className={`session-item ${currentSessionId === session.id ? 'active' : ''}`}
+                >
+                  <div 
+                    className="session-item-content"
+                    onClick={() => onSelectSession(session.id)}
+                  >
+                    <span className="session-item-title">{formatSessionTitle(session)}</span>
+                    <span className="session-item-meta">
+                      <span className={`status-dot status-${session.status}`}></span>
+                      {formatDate(session.updated_at)}
+                    </span>
+                  </div>
+                  <button 
+                    className="session-delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm('Delete this session?')) {
+                        onDeleteSession(session.id);
+                      }
+                    }}
+                    title="Delete session"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+      </div>
+
+      {/* Navigation Section */}
+      <div className="sidebar-section">
+        <nav>
+          {renderNavItems(navItems)}
+        </nav>
+      </div>
     </div>
   );
 };
