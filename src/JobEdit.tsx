@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { createJob, updateJob, getJob, type CreateJobRequest } from './api';
 
-interface JobEditProps {
-  jobId?: string; // If provided, edit mode; otherwise, create mode
-  onSave: () => void;
-  onCancel: () => void;
-}
-
-function JobEdit({ jobId, onSave, onCancel }: JobEditProps) {
+function JobEdit() {
+  const { jobId } = useParams<{ jobId: string }>();
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [scheduleText, setScheduleText] = useState('');
   const [taskPrompt, setTaskPrompt] = useState('');
@@ -76,7 +73,7 @@ function JobEdit({ jobId, onSave, onCancel }: JobEditProps) {
         };
         await createJob(request);
       }
-      onSave();
+      navigate(isEditMode ? `/agent/jobs/${jobId}` : '/agent/jobs');
     } catch (err) {
       console.error('Failed to save job:', err);
       setError(err instanceof Error ? err.message : 'Failed to save job');
@@ -158,7 +155,7 @@ function JobEdit({ jobId, onSave, onCancel }: JobEditProps) {
         </div>
 
         <div className="form-actions">
-          <button type="button" onClick={onCancel} className="btn btn-secondary" disabled={saving}>
+          <button type="button" onClick={() => navigate(jobId ? `/agent/jobs/${jobId}` : '/agent/jobs')} className="btn btn-secondary" disabled={saving}>
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={saving}>

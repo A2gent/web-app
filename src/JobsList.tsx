@@ -1,12 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { listJobs, deleteJob, runJobNow, type RecurringJob } from './api';
 
-interface JobsListProps {
-  onCreateJob: () => void;
-  onEditJob: (jobId: string) => void;
-}
-
-function JobsList({ onCreateJob, onEditJob }: JobsListProps) {
+function JobsList() {
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<RecurringJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +89,7 @@ function JobsList({ onCreateJob, onEditJob }: JobsListProps) {
     <div className="jobs-list-container">
       <div className="jobs-header">
         <h2>Recurring Jobs</h2>
-        <button onClick={onCreateJob} className="btn btn-primary">
+        <button onClick={() => navigate('/agent/jobs/new')} className="btn btn-primary">
           + New Job
         </button>
       </div>
@@ -108,7 +105,7 @@ function JobsList({ onCreateJob, onEditJob }: JobsListProps) {
         <div className="jobs-empty">
           <p>No recurring jobs yet.</p>
           <p>Create a job to schedule automated agent tasks.</p>
-          <button onClick={onCreateJob} className="btn btn-primary">
+          <button onClick={() => navigate('/agent/jobs/new')} className="btn btn-primary">
             Create Your First Job
           </button>
         </div>
@@ -149,8 +146,8 @@ function JobsList({ onCreateJob, onEditJob }: JobsListProps) {
               </div>
 
               <div className="job-actions">
-                <button onClick={() => onEditJob(job.id)} className="btn btn-secondary">
-                  Edit
+                <button onClick={() => navigate(`/agent/jobs/${job.id}`)} className="btn btn-secondary">
+                  View
                 </button>
                 <button onClick={() => handleRunNow(job.id)} className="btn btn-secondary" disabled={!job.enabled}>
                   Run Now

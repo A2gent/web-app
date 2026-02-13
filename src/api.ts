@@ -235,3 +235,11 @@ export async function listJobExecutions(jobId: string, limit?: number): Promise<
   }
   return response.json();
 }
+
+export async function listJobSessions(jobId: string): Promise<Session[]> {
+  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/sessions`);
+  if (!response.ok) {
+    throw new Error(`Failed to list job sessions: ${response.statusText}`);
+  }
+  return response.json();
+}
