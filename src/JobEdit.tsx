@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { createJob, updateJob, getJob, type CreateJobRequest } from './api';
+import { createJob, updateJob, getJob, listProviders, type CreateJobRequest, type LLMProviderType, type ProviderConfig } from './api';
 
 function JobEdit() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -8,6 +8,8 @@ function JobEdit() {
   const [name, setName] = useState('');
   const [scheduleText, setScheduleText] = useState('');
   const [taskPrompt, setTaskPrompt] = useState('');
+  const [llmProvider, setLLMProvider] = useState<LLMProviderType>('openai');
+  const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,10 +18,28 @@ function JobEdit() {
   const isEditMode = !!jobId;
 
   useEffect(() => {
+    void loadProviders();
+  }, []);
+
+  useEffect(() => {
     if (isEditMode && jobId) {
-      loadJob(jobId);
+      void loadJob(jobId);
     }
   }, [isEditMode, jobId]);
+
+  const loadProviders = async () => {
+    try {
+      const data = await listProviders();
+      const selectable = data.filter((provider) => provider.type !== 'fallback_chain');
+      setProviders(selectable);
+      const active = selectable.find((provider) => provider.is_active);
+      if (active) {
+        setLLMProvider(active.type);
+      }
+    } catch (err) {
+      console.error('Failed to load providers:', err);
+    }
+  };
 
   const loadJob = async (id: string) => {
     try {
@@ -28,6 +48,9 @@ function JobEdit() {
       setName(job.name);
       setScheduleText(job.schedule_human);
       setTaskPrompt(job.task_prompt);
+      if (job.llm_provider) {
+        setLLMProvider(job.llm_provider);
+      }
       setEnabled(job.enabled);
     } catch (err) {
       console.error('Failed to load job:', err);
@@ -62,6 +85,7 @@ function JobEdit() {
           name: name.trim(),
           schedule_text: scheduleText.trim(),
           task_prompt: taskPrompt.trim(),
+          llm_provider: llmProvider,
           enabled,
         });
       } else {
@@ -69,6 +93,7 @@ function JobEdit() {
           name: name.trim(),
           schedule_text: scheduleText.trim(),
           task_prompt: taskPrompt.trim(),
+          llm_provider: llmProvider,
           enabled,
         };
         await createJob(request);
@@ -140,6 +165,22 @@ function JobEdit() {
           <p className="help-text">
             These instructions will be given to the agent each time the job runs.
           </p>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="llm-provider">LLM Provider</label>
+          <select
+            id="llm-provider"
+            value={llmProvider}
+            onChange={(e) => setLLMProvider(e.target.value as LLMProviderType)}
+            disabled={saving || providers.length === 0}
+          >
+            {providers.map((provider) => (
+              <option key={provider.type} value={provider.type}>
+                {provider.display_name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="form-group checkbox">

@@ -159,6 +159,10 @@ function JobDetail() {
               <span className="info-value">{job.schedule_human}</span>
             </div>
             <div className="info-item">
+              <span className="info-label">Provider:</span>
+              <span className="info-value">{job.llm_provider || 'Default active provider'}</span>
+            </div>
+            <div className="info-item">
               <span className="info-label">Cron:</span>
               <code>{job.schedule_cron}</code>
             </div>

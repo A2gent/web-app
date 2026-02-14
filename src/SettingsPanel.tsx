@@ -43,7 +43,13 @@ const MANAGED_KEYS = [
 ] as const;
 
 const HIDDEN_CUSTOM_KEYS = new Set<string>([...MANAGED_KEYS]);
-const REMOVED_ENV_KEYS = new Set<string>(['KIMI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY']);
+const REMOVED_ENV_KEYS = new Set<string>([
+  'KIMI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'OPENROUTER_API_KEY',
+  'GOOGLE_API_KEY',
+  'GEMINI_API_KEY',
+]);
 
 function isSecretKey(key: string): boolean {
   const upper = key.toUpperCase();
@@ -94,6 +100,17 @@ function speedToOptionIndex(speed: string): number {
   return closestIndex;
 }
 
+function normalizeCompactionTriggerPercent(value: string): string {
+  const parsed = Number.parseFloat(value.trim());
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_COMPACTION_TRIGGER;
+  }
+
+  const clamped = Math.max(5, Math.min(100, parsed));
+  const snapped = Math.round(clamped / 5) * 5;
+  return String(Math.max(5, Math.min(100, snapped)));
+}
+
 const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSave }) => {
   const [customRows, setCustomRows] = useState<CustomRow[]>(() => {
     const rows: CustomRow[] = [];
@@ -109,7 +126,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSav
   const [completionAudioContent, setCompletionAudioContent] = useState<CompletionAudioContent>(() => parseCompletionAudioContent(settings));
   const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState(settings[ELEVENLABS_VOICE_ID] || '');
   const [elevenLabsSpeed, setElevenLabsSpeed] = useState(settings[ELEVENLABS_SPEED] || '1.0');
-  const [compactionTriggerPercent, setCompactionTriggerPercent] = useState(settings[CONTEXT_COMPACTION_TRIGGER_PERCENT] || DEFAULT_COMPACTION_TRIGGER);
+  const [compactionTriggerPercent, setCompactionTriggerPercent] = useState(
+    normalizeCompactionTriggerPercent(settings[CONTEXT_COMPACTION_TRIGGER_PERCENT] || DEFAULT_COMPACTION_TRIGGER),
+  );
   const [compactionPrompt, setCompactionPrompt] = useState(settings[CONTEXT_COMPACTION_PROMPT] || DEFAULT_COMPACTION_PROMPT);
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
@@ -134,9 +153,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSav
     setCompletionAudioContent(parseCompletionAudioContent(settings));
     setElevenLabsVoiceId(settings[ELEVENLABS_VOICE_ID] || '');
     setElevenLabsSpeed(settings[ELEVENLABS_SPEED] || '1.0');
-    setCompactionTriggerPercent(settings[CONTEXT_COMPACTION_TRIGGER_PERCENT] || DEFAULT_COMPACTION_TRIGGER);
+    setCompactionTriggerPercent(normalizeCompactionTriggerPercent(settings[CONTEXT_COMPACTION_TRIGGER_PERCENT] || DEFAULT_COMPACTION_TRIGGER));
     setCompactionPrompt(settings[CONTEXT_COMPACTION_PROMPT] || DEFAULT_COMPACTION_PROMPT);
   }, [settings]);
+
+  const compactionTriggerValue = Number.parseFloat(compactionTriggerPercent);
+  const compactionTriggerProgress = Number.isFinite(compactionTriggerValue)
+    ? Math.max(5, Math.min(100, compactionTriggerValue))
+    : Number.parseFloat(DEFAULT_COMPACTION_TRIGGER);
 
   const loadVoices = async () => {
     setVoicesError(null);
@@ -239,7 +263,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSav
     payload[COMPLETION_AUDIO_CONTENT] = completionAudioContent;
     payload[SPEECH_ENABLED_KEY] = completionAudioMode === 'off' ? 'false' : 'true';
 
-    const compactionTrigger = Number.parseFloat(compactionTriggerPercent.trim());
+    const compactionTrigger = Number.parseFloat(normalizeCompactionTriggerPercent(compactionTriggerPercent));
     if (!Number.isFinite(compactionTrigger) || compactionTrigger <= 0 || compactionTrigger > 100) {
       setSaveError('Context compaction trigger must be a number between 0 and 100.');
       return;
@@ -406,13 +430,19 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSav
               <input
                 className="compaction-slider"
                 type="range"
-                min="1"
+                min="5"
                 max="100"
-                step="0.5"
+                step="5"
                 value={compactionTriggerPercent}
-                onChange={(e) => setCompactionTriggerPercent(e.target.value)}
+                style={{ '--compaction-slider-progress': `${compactionTriggerProgress}%` } as React.CSSProperties}
+                onChange={(e) => setCompactionTriggerPercent(normalizeCompactionTriggerPercent(e.target.value))}
               />
-              <div className="compaction-slider-value">{Number.parseFloat(compactionTriggerPercent || '0').toFixed(1)}%</div>
+              <div
+                className="compaction-slider-value"
+                style={{ '--compaction-slider-progress': `${compactionTriggerProgress}%` } as React.CSSProperties}
+              >
+                {Math.round(compactionTriggerProgress)}%
+              </div>
             </div>
           </label>
           <label className="settings-field">

@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, type DragEvent } from 'react';
 import ChatInput from './ChatInput';
-import { createProject, createSession, deleteProject, deleteSession, listProjects, listProviders, listSessions, sendMessage, updateSessionProject, type LLMProviderType, type Project, type ProviderConfig, type Session } from './api';
+import { createProject, createSession, deleteProject, deleteSession, listProjects, listProviders, listSessions, updateSessionProject, type LLMProviderType, type Project, type ProviderConfig, type Session } from './api';
 
 interface SessionsListProps {
-  onSelectSession: (sessionId: string) => void;
+  onSelectSession: (sessionId: string, initialMessage?: string) => void;
 }
 
 function SessionsList({ onSelectSession }: SessionsListProps) {
@@ -82,7 +82,6 @@ function SessionsList({ onSelectSession }: SessionsListProps) {
   };
 
   const handleStartSession = async (message: string) => {
-    let createdSessionId: string | null = null;
     setIsCreatingSession(true);
     setError(null);
 
@@ -92,22 +91,10 @@ function SessionsList({ onSelectSession }: SessionsListProps) {
         provider: selectedProvider || undefined,
         project_id: selectedProjectId || undefined,
       });
-      createdSessionId = created.id;
-      await sendMessage(created.id, message);
-      await loadSessions();
-      onSelectSession(created.id);
+      onSelectSession(created.id, message);
     } catch (err) {
       console.error('Failed to create session from sessions list:', err);
       setError(err instanceof Error ? err.message : 'Failed to create session');
-
-      if (createdSessionId) {
-        try {
-          await loadSessions();
-        } catch {
-          // Keep original error visible.
-        }
-        onSelectSession(createdSessionId);
-      }
     } finally {
       setIsCreatingSession(false);
     }
@@ -292,7 +279,12 @@ function SessionsList({ onSelectSession }: SessionsListProps) {
     <div
       key={session.id}
       className="session-card"
-      onClick={() => onSelectSession(session.id)}
+      onClick={() => {
+        if (draggingSessionID) {
+          return;
+        }
+        onSelectSession(session.id);
+      }}
       draggable
       onDragStart={(event) => handleSessionDragStart(event, session.id)}
       onDragEnd={handleSessionDragEnd}
@@ -418,7 +410,14 @@ function SessionsList({ onSelectSession }: SessionsListProps) {
                       </button>
                     </div>
                     {!isCollapsed ? (
-                      <div className="sessions-list">
+                      <div
+                        className="sessions-list"
+                        onDragOver={(event) => handleSectionDragOver(event, sectionKey)}
+                        onDragLeave={() => handleSectionDragLeave(sectionKey)}
+                        onDrop={(event) => {
+                          void handleSectionDrop(event, project.id);
+                        }}
+                      >
                         {sectionSessions.map((session) => renderSessionCard(session))}
                         {showEmptyDropzone ? <div className="session-project-dropzone">Drop a session here</div> : null}
                       </div>
@@ -448,7 +447,14 @@ function SessionsList({ onSelectSession }: SessionsListProps) {
                   <span className="sessions-group-count">{ungroupedSessions.length} session{ungroupedSessions.length === 1 ? '' : 's'}</span>
                 </div>
                 {!isSectionCollapsed('__ungrouped__') ? (
-                  <div className="sessions-list">
+                  <div
+                    className="sessions-list"
+                    onDragOver={(event) => handleSectionDragOver(event, '__ungrouped__')}
+                    onDragLeave={() => handleSectionDragLeave('__ungrouped__')}
+                    onDrop={(event) => {
+                      void handleSectionDrop(event, undefined);
+                    }}
+                  >
                     {ungroupedSessions.map((session) => renderSessionCard(session))}
                   </div>
                 ) : null}

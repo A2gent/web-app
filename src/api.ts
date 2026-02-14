@@ -2,6 +2,8 @@
 
 const API_BASE_URL_STORAGE_KEY = 'a2gent.api_base_url';
 const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const APP_TITLE_STORAGE_KEY = 'a2gent.app_title';
+const DEFAULT_APP_TITLE = '🤖 A2';
 
 function normalizeApiBaseUrl(url: string): string {
   return url.trim().replace(/\/$/, '');
@@ -57,6 +59,43 @@ export function setApiBaseUrl(url: string): void {
   }
 
   window.localStorage.setItem(API_BASE_URL_STORAGE_KEY, normalized);
+}
+
+function normalizeAppTitle(title: string): string {
+  return title.trim();
+}
+
+export function getDefaultAppTitle(): string {
+  return DEFAULT_APP_TITLE;
+}
+
+export function getAppTitle(): string {
+  if (typeof window === 'undefined') {
+    return DEFAULT_APP_TITLE;
+  }
+
+  const stored = window.localStorage.getItem(APP_TITLE_STORAGE_KEY);
+  const normalized = normalizeAppTitle(stored || '');
+  if (normalized !== '') {
+    return normalized;
+  }
+
+  return DEFAULT_APP_TITLE;
+}
+
+export function setAppTitle(title: string): string {
+  if (typeof window === 'undefined') {
+    return DEFAULT_APP_TITLE;
+  }
+
+  const normalized = normalizeAppTitle(title);
+  if (normalized === '') {
+    window.localStorage.removeItem(APP_TITLE_STORAGE_KEY);
+    return DEFAULT_APP_TITLE;
+  }
+
+  window.localStorage.setItem(APP_TITLE_STORAGE_KEY, normalized);
+  return normalized;
 }
 
 // Types matching the Go server responses
@@ -182,7 +221,18 @@ export interface ElevenLabsVoice {
   preview_url?: string;
 }
 
-export type LLMProviderType = 'fallback_chain' | 'kimi' | 'openrouter' | 'lmstudio' | 'anthropic';
+export type LLMProviderType = string;
+
+export interface FallbackChainNode {
+  provider: LLMProviderType;
+  model: string;
+}
+
+export interface RouterRule {
+  match: string;
+  provider: LLMProviderType;
+  model?: string;
+}
 
 export interface ProviderConfig {
   type: LLMProviderType;
@@ -196,14 +246,27 @@ export interface ProviderConfig {
   has_api_key: boolean;
   base_url: string;
   model: string;
-  fallback_chain?: LLMProviderType[];
+  fallback_chain?: FallbackChainNode[];
+  router_provider?: LLMProviderType;
+  router_model?: string;
+  router_rules?: RouterRule[];
 }
 
 export interface UpdateProviderRequest {
+  name?: string;
   api_key?: string;
   base_url?: string;
   model?: string;
-  fallback_chain?: LLMProviderType[];
+  fallback_chain?: FallbackChainNode[];
+  router_provider?: LLMProviderType;
+  router_model?: string;
+  router_rules?: RouterRule[];
+  active?: boolean;
+}
+
+export interface CreateFallbackAggregateRequest {
+  name: string;
+  fallback_chain: FallbackChainNode[];
   active?: boolean;
 }
 
@@ -246,6 +309,20 @@ export interface IntegrationRequest {
 
 export interface IntegrationTestResponse {
   success: boolean;
+  message: string;
+}
+
+export interface TelegramChatCandidate {
+  chat_id: string;
+  type: string;
+  title?: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+export interface TelegramChatDiscoveryResponse {
+  chats: TelegramChatCandidate[];
   message: string;
 }
 
@@ -443,6 +520,7 @@ export interface RecurringJob {
   schedule_human: string;
   schedule_cron: string;
   task_prompt: string;
+  llm_provider?: LLMProviderType;
   enabled: boolean;
   last_run_at?: string;
   next_run_at?: string;
@@ -465,6 +543,7 @@ export interface CreateJobRequest {
   name: string;
   schedule_text: string;
   task_prompt: string;
+  llm_provider?: LLMProviderType;
   enabled: boolean;
 }
 
@@ -472,6 +551,7 @@ export interface UpdateJobRequest {
   name?: string;
   schedule_text?: string;
   task_prompt?: string;
+  llm_provider?: LLMProviderType | '';
   enabled?: boolean;
 }
 
@@ -682,7 +762,7 @@ export async function listProviders(): Promise<ProviderConfig[]> {
 }
 
 export async function updateProvider(providerType: LLMProviderType, payload: UpdateProviderRequest): Promise<ProviderConfig[]> {
-  const response = await fetch(`${getApiBaseUrl()}/providers/${providerType}`, {
+  const response = await fetch(`${getApiBaseUrl()}/providers/${encodeURIComponent(providerType)}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -694,6 +774,30 @@ export async function updateProvider(providerType: LLMProviderType, payload: Upd
     throw new Error(error.error || `Failed to update provider: ${response.statusText}`);
   }
   return response.json();
+}
+
+export async function createFallbackAggregate(payload: CreateFallbackAggregateRequest): Promise<ProviderConfig[]> {
+  const response = await fetch(`${getApiBaseUrl()}/providers/fallback-aggregates`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || `Failed to create fallback aggregate: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function deleteProvider(providerType: LLMProviderType): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/providers/${encodeURIComponent(providerType)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to delete provider');
+  }
 }
 
 export async function setActiveProvider(providerType: LLMProviderType): Promise<ProviderConfig[]> {
@@ -748,6 +852,36 @@ export async function listKimiModels(baseURL?: string): Promise<string[]> {
   const response = await fetch(url.toString());
   if (!response.ok) {
     throw await buildApiError(response, 'Failed to load Kimi models');
+  }
+  const data: ProviderModelsResponse = await response.json();
+  return data.models || [];
+}
+
+export async function listGoogleModels(baseURL?: string): Promise<string[]> {
+  const url = new URL(`${getApiBaseUrl()}/providers/google/models`);
+  const normalizedBaseURL = normalizeLMStudioBaseUrl(baseURL);
+  if (normalizedBaseURL) {
+    url.searchParams.set('base_url', normalizedBaseURL);
+  }
+
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to load Google Gemini models');
+  }
+  const data: ProviderModelsResponse = await response.json();
+  return data.models || [];
+}
+
+export async function listOpenAIModels(baseURL?: string): Promise<string[]> {
+  const url = new URL(`${getApiBaseUrl()}/providers/openai/models`);
+  const normalizedBaseURL = normalizeLMStudioBaseUrl(baseURL);
+  if (normalizedBaseURL) {
+    url.searchParams.set('base_url', normalizedBaseURL);
+  }
+
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to load OpenAI models');
   }
   const data: ProviderModelsResponse = await response.json();
   return data.models || [];
@@ -811,4 +945,18 @@ export async function testIntegration(integrationId: string): Promise<Integratio
     throw new Error(data.message || `Failed to test integration: ${response.statusText}`);
   }
   return data;
+}
+
+export async function discoverTelegramChats(botToken: string): Promise<TelegramChatDiscoveryResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/integrations/telegram/chat-ids`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ bot_token: botToken }),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to discover Telegram chat IDs');
+  }
+  return response.json();
 }

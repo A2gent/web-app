@@ -4,8 +4,10 @@ import type {
   IntegrationMode,
   IntegrationProvider,
   IntegrationRequest,
+  TelegramChatCandidate,
   IntegrationTestResponse,
 } from './api';
+import { discoverTelegramChats } from './api';
 
 interface IntegrationsPanelProps {
   integrations: Integration[];
@@ -21,7 +23,15 @@ interface ProviderSpec {
   label: string;
   description: string;
   modes: IntegrationMode[];
-  fields: Array<{ key: string; label: string; placeholder: string; secret?: boolean; required?: boolean }>;
+  fields: Array<{
+    key: string;
+    label: string;
+    placeholder?: string;
+    secret?: boolean;
+    required?: boolean;
+    kind?: 'text' | 'select';
+    options?: Array<{ value: string; label: string }>;
+  }>;
 }
 
 const PROVIDERS: ProviderSpec[] = [
@@ -32,7 +42,34 @@ const PROVIDERS: ProviderSpec[] = [
     modes: ['notify_only', 'duplex'],
     fields: [
       { key: 'bot_token', label: 'Bot token', placeholder: '123456:abc...', secret: true },
-      { key: 'chat_id', label: 'Chat ID', placeholder: '-1001234567890' },
+      { key: 'chat_id', label: 'Chat ID (optional in all-group mode)', placeholder: '-1001234567890', required: false },
+      {
+        key: 'allow_all_group_chats',
+        label: 'Chat scope',
+        kind: 'select',
+        options: [
+          { value: 'false', label: 'Single chat (use Chat ID)' },
+          { value: 'true', label: 'All groups this bot is in' },
+        ],
+      },
+      {
+        key: 'project_scope',
+        label: 'Project mapping',
+        kind: 'select',
+        options: [
+          { value: 'group', label: 'Map each Telegram group to a project' },
+          { value: 'none', label: 'Do not assign project' },
+        ],
+      },
+      {
+        key: 'session_scope',
+        label: 'Session mapping',
+        kind: 'select',
+        options: [
+          { value: 'topic', label: 'Map each topic/thread to a session' },
+          { value: 'chat', label: 'Single session per chat' },
+        ],
+      },
     ],
   },
   {
@@ -198,15 +235,29 @@ function modeLabel(mode: IntegrationMode): string {
   return mode === 'duplex' ? 'Duplex chat' : 'Notify only';
 }
 
+function defaultConfigForProvider(provider: IntegrationProvider): Record<string, string> {
+  if (provider !== 'telegram') {
+    return {};
+  }
+  return {
+    allow_all_group_chats: 'false',
+    project_scope: 'group',
+    session_scope: 'topic',
+  };
+}
+
 const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isSaving, onCreate, onUpdate, onDelete, onTest }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [provider, setProvider] = useState<IntegrationProvider>('telegram');
   const [name, setName] = useState('');
   const [mode, setMode] = useState<IntegrationMode>('duplex');
   const [enabled, setEnabled] = useState(true);
-  const [config, setConfig] = useState<Record<string, string>>({});
+  const [config, setConfig] = useState<Record<string, string>>(defaultConfigForProvider('telegram'));
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isDiscoveringTelegramChats, setIsDiscoveringTelegramChats] = useState(false);
+  const [telegramChats, setTelegramChats] = useState<TelegramChatCandidate[]>([]);
+  const [telegramDiscoveryMessage, setTelegramDiscoveryMessage] = useState<string | null>(null);
 
   const spec = useMemo(() => providerById(provider), [provider]);
 
@@ -222,7 +273,9 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
     const nextSpec = providerById(next);
     setProvider(next);
     setMode(nextSpec.modes[0]);
-    setConfig({});
+    setConfig(defaultConfigForProvider(next));
+    setTelegramChats([]);
+    setTelegramDiscoveryMessage(null);
   };
 
   const resetForm = () => {
@@ -231,9 +284,11 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
     setName('');
     setMode('duplex');
     setEnabled(true);
-    setConfig({});
+    setConfig(defaultConfigForProvider('telegram'));
     setError(null);
     setSuccess(null);
+    setTelegramChats([]);
+    setTelegramDiscoveryMessage(null);
   };
 
   const validateForm = (): string | null => {
@@ -287,9 +342,11 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
     setName(integration.name);
     setMode(integration.mode);
     setEnabled(integration.enabled);
-    setConfig(integration.config || {});
+    setConfig({ ...defaultConfigForProvider(integration.provider), ...(integration.config || {}) });
     setError(null);
     setSuccess(null);
+    setTelegramChats([]);
+    setTelegramDiscoveryMessage(null);
   };
 
   const handleDelete = async (integration: Integration) => {
@@ -322,6 +379,54 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
 
   const handleModeChange = (nextMode: IntegrationMode) => {
     setMode(nextMode);
+  };
+
+  const handleDiscoverTelegramChats = async () => {
+    setError(null);
+    setSuccess(null);
+
+    const botToken = (config.bot_token || '').trim();
+    if (!botToken) {
+      setError('Bot token is required before discovering Chat IDs.');
+      return;
+    }
+
+    try {
+      setIsDiscoveringTelegramChats(true);
+      const result = await discoverTelegramChats(botToken);
+      setTelegramChats(result.chats || []);
+      setTelegramDiscoveryMessage(result.message || null);
+
+      if ((result.chats || []).length === 1) {
+        const foundID = result.chats[0].chat_id;
+        setConfig((prev) => ({ ...prev, chat_id: foundID }));
+        setSuccess(`Found 1 chat. Chat ID "${foundID}" was filled automatically.`);
+        return;
+      }
+      setSuccess(result.message || 'Telegram chat discovery completed.');
+    } catch (discoverError) {
+      setError(discoverError instanceof Error ? discoverError.message : 'Failed to discover Telegram chat IDs');
+    } finally {
+      setIsDiscoveringTelegramChats(false);
+    }
+  };
+
+  const formatTelegramChatLabel = (chat: TelegramChatCandidate): string => {
+    const title = (chat.title || '').trim();
+    if (title) {
+      return `${title} (${chat.type})`;
+    }
+    const username = (chat.username || '').trim();
+    if (username) {
+      return `@${username} (${chat.type})`;
+    }
+    const firstName = (chat.first_name || '').trim();
+    const lastName = (chat.last_name || '').trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ');
+    if (fullName) {
+      return `${fullName} (${chat.type})`;
+    }
+    return chat.type || 'chat';
   };
 
   return (
@@ -399,14 +504,76 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
         <div className="settings-group">
           {spec.fields.map((field) => (
             <label className="settings-field" key={field.key}>
-              <span>{field.label}</span>
-              <input
-                type={field.secret ? 'password' : 'text'}
-                value={config[field.key] || ''}
-                onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                placeholder={field.placeholder}
-                autoComplete="off"
-              />
+              <span className={provider === 'telegram' && field.key === 'chat_id' ? 'settings-field-label-row' : ''}>
+                <span>{field.label}</span>
+                {provider === 'telegram' && field.key === 'chat_id' && (
+                  <button
+                    type="button"
+                    className="settings-add-btn integration-field-action-btn"
+                    onClick={handleDiscoverTelegramChats}
+                    disabled={isDiscoveringTelegramChats}
+                  >
+                    {isDiscoveringTelegramChats ? 'Finding...' : 'Find chat IDs'}
+                  </button>
+                )}
+              </span>
+              {field.kind === 'select' ? (
+                <select
+                  value={config[field.key] || field.options?.[0]?.value || ''}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                >
+                  {(field.options || []).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={field.secret ? 'password' : 'text'}
+                  value={config[field.key] || ''}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                  placeholder={field.placeholder}
+                  autoComplete="off"
+                />
+              )}
+              {provider === 'telegram' && field.key === 'bot_token' && (
+                <div className="integration-helper-block">
+                  <p className="settings-help integration-helper-text">
+                    First create a Telegram bot with @BotFather (send /newbot), then copy the bot token BotFather gives you and paste it here.
+                  </p>
+                  <p className="settings-help integration-helper-text">
+                    In @BotFather, enable group usage with /setjoingroups and disable privacy mode with /setprivacy if you want normal (non-command) group messages.
+                  </p>
+                </div>
+              )}
+              {provider === 'telegram' && field.key === 'chat_id' && (
+                <div className="integration-helper-block">
+                  <p className="settings-help integration-helper-text">
+                    BotFather gives only a bot token. To get Chat ID: 1) open Telegram and start a chat with your bot, 2) send any message (for example, /start), 3) click Find chat IDs.
+                  </p>
+                  <p className="settings-help integration-helper-text">
+                    For group-to-project and thread-to-session mapping: add the bot to your group, create topics in that group, and keep Session mapping set to topic.
+                  </p>
+                  {telegramDiscoveryMessage && (
+                    <p className="settings-help integration-helper-text">{telegramDiscoveryMessage}</p>
+                  )}
+                  {telegramChats.length > 0 && (
+                    <div className="integration-chat-candidates">
+                      {telegramChats.map((chat) => (
+                        <button
+                          key={chat.chat_id}
+                          type="button"
+                          className="settings-add-btn integration-chat-candidate-btn"
+                          onClick={() => setConfig((prev) => ({ ...prev, chat_id: chat.chat_id }))}
+                        >
+                          Use {chat.chat_id} ({formatTelegramChatLabel(chat)})
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </label>
           ))}
         </div>

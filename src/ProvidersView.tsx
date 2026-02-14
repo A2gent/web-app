@@ -1,22 +1,36 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { listProviders, setActiveProvider, type LLMProviderType, type ProviderConfig } from './api';
+import { deleteProvider, listProviders, setActiveProvider, type LLMProviderType, type ProviderConfig } from './api';
 
-function formatChainNode(type: LLMProviderType): string {
+function isFallbackProvider(type: LLMProviderType): boolean {
+  return type === 'fallback_chain' || type.startsWith('fallback_chain:');
+}
+
+function formatProvider(type: LLMProviderType): string {
   switch (type) {
     case 'lmstudio':
       return 'LM Studio';
     case 'anthropic':
       return 'Anthropic';
-	case 'openrouter':
-		return 'OpenRouter';
-	case 'kimi':
-		return 'Kimi';
-	case 'fallback_chain':
-		return 'Fallback';
+    case 'openrouter':
+      return 'OpenRouter';
+    case 'kimi':
+      return 'Kimi';
+    case 'google':
+      return 'Gemini';
+    case 'openai':
+      return 'OpenAI';
+    case 'automatic_router':
+      return 'Automatic Router';
     default:
       return type;
   }
+}
+
+function formatNodeLabel(provider: LLMProviderType, model?: string): string {
+  const providerLabel = formatProvider(provider);
+  const modelLabel = model?.trim();
+  return modelLabel ? `${providerLabel} / ${modelLabel}` : providerLabel;
 }
 
 function ProvidersView() {
@@ -40,7 +54,7 @@ function ProvidersView() {
   };
 
   useEffect(() => {
-    loadProviders();
+    void loadProviders();
   }, []);
 
   const handleSetActive = async (providerType: LLMProviderType) => {
@@ -57,13 +71,33 @@ function ProvidersView() {
     }
   };
 
+  const handleDeleteAggregate = async (provider: ProviderConfig) => {
+    if (!isFallbackProvider(provider.type)) {
+      return;
+    }
+    if (!confirm(`Delete fallback aggregate "${provider.display_name}"?`)) {
+      return;
+    }
+    try {
+      setIsSaving(true);
+      setError(null);
+      await deleteProvider(provider.type);
+      await loadProviders();
+    } catch (err) {
+      console.error('Failed to delete provider:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete provider');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="sessions-loading">Loading providers...</div>;
   }
 
-  const aggregate = providers.find((provider) => provider.type === 'fallback_chain') || null;
-  const regularProviders = providers.filter((provider) => provider.type !== 'fallback_chain');
-  const orderedProviders = aggregate ? [aggregate, ...regularProviders] : regularProviders;
+  const automaticRouterProviders = providers.filter((provider) => provider.type === 'automatic_router');
+  const chainProviders = providers.filter((provider) => isFallbackProvider(provider.type));
+  const regularProviders = providers.filter((provider) => !isFallbackProvider(provider.type) && provider.type !== 'automatic_router');
 
   return (
     <div className="page-shell">
@@ -79,22 +113,121 @@ function ProvidersView() {
       )}
 
       <div className="page-content page-content-narrow provider-list-view">
-        {orderedProviders.map((provider) => (
+        <div className="settings-actions">
+          <Link to="/providers/fallback-aggregates/new" className="settings-add-btn">
+            New fallback aggregate
+          </Link>
+        </div>
+
+        <h3>Automatic Router</h3>
+        <p className="thinking-note">
+          Automatic router is for intent-based model selection: a lightweight router model reads the prompt and your plain-text mapping rules,
+          then chooses the best target model (or fallback chain) for the actual response.
+        </p>
+        {automaticRouterProviders.length === 0 ? (
+          <div className="provider-chain-empty">Automatic router is not available.</div>
+        ) : null}
+        {automaticRouterProviders.map((provider) => {
+          const routingRules = provider.router_rules || [];
+          const treePaddingY = 12;
+          const branchesPaddingY = 6;
+          const branchHeight = 44;
+          const branchGap = 10;
+          const branchAreaHeight = routingRules.length > 0
+            ? routingRules.length * branchHeight + (routingRules.length - 1) * branchGap
+            : branchHeight;
+          const svgHeight = treePaddingY * 2 + branchesPaddingY * 2 + branchAreaHeight;
+          const branchCenterY = (index: number) =>
+            treePaddingY + branchesPaddingY + (branchHeight / 2) + (index * (branchHeight + branchGap));
+          const rootY = routingRules.length > 0
+            ? (branchCenterY(0) + branchCenterY(routingRules.length - 1)) / 2
+            : svgHeight / 2;
+
+          return (
+            <div key={provider.type} className={`provider-list-item ${provider.is_active ? 'active' : ''}`}>
+              <div className="provider-list-main">
+                <h3>{provider.display_name}</h3>
+                <div className="provider-list-meta">
+                  <span className={`status-badge ${provider.configured ? 'status-completed' : 'status-paused'}`}>
+                    {provider.configured ? 'Configured' : 'Not configured'}
+                  </span>
+                  {provider.is_active ? <span className="status-badge status-running">Active</span> : null}
+                </div>
+                <div className="provider-router-tree" aria-label="Automatic routing tree">
+                  {routingRules.length > 0 ? (
+                    <svg className="provider-router-bezier" viewBox={`0 0 100 ${svgHeight}`} preserveAspectRatio="none" aria-hidden="true">
+                      {routingRules.map((_, index) => {
+                        const y = branchCenterY(index);
+                        return (
+                          <path
+                            key={`path-${index}`}
+                            d={`M 27 ${rootY} C 39 ${rootY}, 47 ${y}, 58 ${y}`}
+                            className="provider-router-bezier-path"
+                          />
+                        );
+                      })}
+                    </svg>
+                  ) : null}
+                  <div className="provider-router-root-wrap">
+                    <span className="provider-router-root-label">Request router</span>
+                    <span className="provider-router-root-node">
+                      {formatNodeLabel(provider.router_provider || 'automatic_router', provider.router_model)}
+                    </span>
+                  </div>
+                  <div className="provider-router-branches">
+                    {routingRules.length === 0 ? (
+                      <div className="provider-chain-empty">No routing rules configured yet</div>
+                    ) : (
+                      routingRules.map((rule, index) => (
+                        <div key={`${rule.match}-${rule.provider}-${rule.model || ''}-${index}`} className="provider-router-branch">
+                          <span className="provider-router-rule">Rule: {rule.match}</span>
+                          <span className="provider-router-connector" aria-hidden="true" />
+                          <span className="provider-router-target">{formatNodeLabel(rule.provider, rule.model)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="provider-list-actions">
+                <Link to={`/providers/${encodeURIComponent(provider.type)}`} className="settings-add-btn">
+                  Edit
+                </Link>
+                <button
+                  type="button"
+                  className="settings-save-btn"
+                  disabled={isSaving || provider.is_active}
+                  onClick={() => handleSetActive(provider.type)}
+                >
+                  Set active
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        <h3>Fallback Chains</h3>
+        <p className="thinking-note">
+          Fallback chains improve reliability and continuity: if one provider/model fails (rate limit, outage, auth, or transient errors),
+          the run automatically continues on the next model in the chain without manual intervention.
+        </p>
+        {chainProviders.length === 0 ? (
+          <div className="provider-chain-empty">No fallback chains yet.</div>
+        ) : null}
+        {chainProviders.map((provider) => (
           <div key={provider.type} className={`provider-list-item ${provider.is_active ? 'active' : ''}`}>
             <div className="provider-list-main">
               <h3>{provider.display_name}</h3>
               <div className="provider-list-meta">
-                <span className={`status-badge ${provider.configured ? 'status-completed' : 'status-paused'}`}>
-                  {provider.configured ? 'Configured' : 'Not configured'}
-                </span>
                 {provider.is_active ? <span className="status-badge status-running">Active</span> : null}
                 {provider.model ? <span className="session-provider-chip">{provider.model}</span> : null}
               </div>
-              {provider.type === 'fallback_chain' ? (
+              {isFallbackProvider(provider.type) ? (
                 <div className="provider-chain-visual" aria-label="Fallback chain nodes">
                   {(provider.fallback_chain || []).map((node, index) => (
-                    <span key={`${node}-${index}`} className="provider-chain-item-wrap">
-                      <span className="provider-chain-node">{formatChainNode(node)}</span>
+                    <span key={`${node.provider}-${node.model}-${index}`} className="provider-chain-item-wrap">
+                      <span className="provider-chain-node">{formatProvider(node.provider)} / {node.model}</span>
                       {index < (provider.fallback_chain || []).length - 1 ? <span className="provider-chain-arrow">→</span> : null}
                     </span>
                   ))}
@@ -106,7 +239,47 @@ function ProvidersView() {
             </div>
 
             <div className="provider-list-actions">
-              <Link to={`/providers/${provider.type}`} className="settings-add-btn">
+              <Link to={`/providers/${encodeURIComponent(provider.type)}`} className="settings-add-btn">
+                Edit
+              </Link>
+              <button
+                type="button"
+                className="settings-save-btn"
+                disabled={isSaving || provider.is_active}
+                onClick={() => handleSetActive(provider.type)}
+              >
+                Set active
+              </button>
+              {isFallbackProvider(provider.type) ? (
+                <button
+                  type="button"
+                  className="settings-remove-btn"
+                  onClick={() => void handleDeleteAggregate(provider)}
+                  disabled={isSaving || provider.is_active}
+                >
+                  Delete
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ))}
+
+        <h3>Regular Providers</h3>
+        {regularProviders.map((provider) => (
+          <div key={provider.type} className={`provider-list-item ${provider.is_active ? 'active' : ''}`}>
+            <div className="provider-list-main">
+              <h3>{provider.display_name}</h3>
+              <div className="provider-list-meta">
+                <span className={`status-badge ${provider.configured ? 'status-completed' : 'status-paused'}`}>
+                  {provider.configured ? 'Configured' : 'Not configured'}
+                </span>
+                {provider.is_active ? <span className="status-badge status-running">Active</span> : null}
+                {provider.model ? <span className="session-provider-chip">{provider.model}</span> : null}
+              </div>
+            </div>
+
+            <div className="provider-list-actions">
+              <Link to={`/providers/${encodeURIComponent(provider.type)}`} className="settings-add-btn">
                 Edit
               </Link>
               <button

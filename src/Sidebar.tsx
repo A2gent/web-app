@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 interface NavItem {
@@ -7,6 +8,8 @@ interface NavItem {
 }
 
 interface SidebarProps {
+  title: string;
+  onTitleChange: (title: string) => void;
   onNavigate?: () => void;
 }
 
@@ -20,14 +23,66 @@ const navItems: NavItem[] = [
   { id: 'providers', label: 'LLM providers', path: '/providers' },
 ];
 
-function Sidebar({ onNavigate }: SidebarProps) {
+function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
   const location = useLocation();
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(title);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setTitleDraft(title);
+  }, [title]);
+
+  useEffect(() => {
+    if (!isEditingTitle) {
+      return;
+    }
+    titleInputRef.current?.focus();
+    titleInputRef.current?.select();
+  }, [isEditingTitle]);
+
+  const commitTitleEdit = () => {
+    onTitleChange(titleDraft);
+    setIsEditingTitle(false);
+  };
+
+  const cancelTitleEdit = () => {
+    setTitleDraft(title);
+    setIsEditingTitle(false);
+  };
 
   return (
     <div className="sidebar">
-      <Link to="/" className="sidebar-title-link" onClick={onNavigate}>
-        <h2 className="sidebar-title">A2gent</h2>
-      </Link>
+      <div className="sidebar-title-wrap">
+        {isEditingTitle ? (
+          <input
+            ref={titleInputRef}
+            className="sidebar-title-input"
+            value={titleDraft}
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onBlur={commitTitleEdit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitTitleEdit();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelTitleEdit();
+              }
+            }}
+            aria-label="Edit app title"
+          />
+        ) : (
+          <button
+            type="button"
+            className="sidebar-title-button"
+            onClick={() => setIsEditingTitle(true)}
+            title="Click to rename app title"
+          >
+            <h2 className="sidebar-title">{title}</h2>
+          </button>
+        )}
+      </div>
 
       <nav className="sidebar-nav">
         <ul className="nav-list">

@@ -127,7 +127,12 @@ function JobsList() {
             {jobs.map(job => (
               <div key={job.id} className={`job-card ${!job.enabled ? 'job-disabled' : ''}`}>
                 <div className="job-card-header">
-                  <h3 className="job-name">{job.name}</h3>
+                  <div className="job-header-main">
+                    <h3 className="job-name">{job.name}</h3>
+                    <div className="job-primary-schedule" title={job.schedule_human}>
+                      {job.schedule_human}
+                    </div>
+                  </div>
                   <div className="job-status">
                     <span className={`status-badge ${job.enabled ? 'status-enabled' : 'status-disabled'}`}>
                       {job.enabled ? 'Enabled' : 'Disabled'}
@@ -136,10 +141,12 @@ function JobsList() {
                 </div>
 
                 <div className="job-details">
-                  <div className="job-schedule">
-                    <span className="label">Schedule:</span>
-                    <span className="value">{job.schedule_human}</span>
-                  </div>
+                  {job.llm_provider ? (
+                    <div className="job-provider">
+                      <span className="label">Provider:</span>
+                      <span className="value">{job.llm_provider}</span>
+                    </div>
+                  ) : null}
                   <div className="job-cron">
                     <code>{job.schedule_cron}</code>
                   </div>

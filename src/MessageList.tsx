@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useMemo, useRef } from 'react';
 import type { Message, ToolCall, ToolResult } from './api';
 import { AudioPlaybackContext } from './audioPlayback';
+import { renderMarkdownToHtml } from './markdown';
 
 interface MessageListProps {
   messages: Message[];
@@ -65,9 +66,27 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
     if (!active.text || !active.sessionId || !sessionId || active.sessionId !== sessionId) {
       return -1;
     }
+    if (active.contentType !== 'final_response') {
+      return -1;
+    }
+    const activeNormalized = active.text.trim();
+    if (activeNormalized === '') {
+      return -1;
+    }
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const message = messages[i];
-      if (message.role === 'assistant' && message.content === active.text) {
+      if (message.role !== 'assistant') {
+        continue;
+      }
+      const messageNormalized = message.content.trim();
+      if (messageNormalized === '') {
+        continue;
+      }
+      if (
+        messageNormalized === activeNormalized
+        || messageNormalized.includes(activeNormalized)
+        || activeNormalized.includes(messageNormalized)
+      ) {
         return i;
       }
     }
@@ -77,7 +96,8 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
   const renderMessageContent = (message: Message, index: number) => {
     const isHighlightedAssistantMessage = index === highlightedAssistantIndex && message.role === 'assistant';
     if (!isHighlightedAssistantMessage) {
-      return formatContent(message.content);
+      const html = renderMarkdownToHtml(message.content);
+      return <div className="message-markdown" dangerouslySetInnerHTML={{ __html: html }} />;
     }
 
     const highlightedChars = Math.max(0, Math.min(message.content.length, audioPlayback.state.charIndex));

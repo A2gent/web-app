@@ -10,10 +10,11 @@ import ChatView from './ChatView';
 import IntegrationsView from './IntegrationsView';
 import ProviderEditView from './ProviderEditView';
 import ProvidersView from './ProvidersView';
+import FallbackAggregateCreateView from './FallbackAggregateCreateView';
 import SettingsView from './SettingsView';
 import MyMindView from './MyMindView';
 import ThinkingView from './ThinkingView';
-import { getSession, getSettings, listSessions, synthesizeCompletionAudio, type Message, type Session } from './api';
+import { getAppTitle, getSession, getSettings, listSessions, setAppTitle as persistAppTitle, synthesizeCompletionAudio, type Message, type Session } from './api';
 import { AudioPlaybackContext, defaultAudioPlaybackState, type AudioPlaybackState } from './audioPlayback';
 import { THINKING_PROJECT_ID } from './thinking';
 import './App.css';
@@ -188,10 +189,7 @@ function playSystemCompletionAudio(text: string, tracker: AudioPlaybackTracker):
   }
   return new Promise<void>((resolve, reject) => {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.onstart = () => {
-      tracker.onStart('system');
-      tracker.onProgress(0, 0);
-    };
+    utterance.onstart = () => tracker.onResume();
     utterance.onboundary = (event) => {
       if (typeof event.charIndex !== 'number') {
         return;
@@ -211,6 +209,8 @@ function playSystemCompletionAudio(text: string, tracker: AudioPlaybackTracker):
       tracker.onError();
       reject(new Error('System speech playback failed.'));
     };
+    tracker.onStart('system');
+    tracker.onProgress(0, 0);
     window.speechSynthesis.speak(utterance);
   });
 }
@@ -241,15 +241,16 @@ async function playCompletionAudio(
   settings: Record<string, string>,
   audioRef: React.MutableRefObject<HTMLAudioElement | null>,
   tracker: AudioPlaybackTracker,
-  onSourceReady: (mode: CompletionAudioMode, sessionId: string, text: string) => void,
+  onSourceReady: (mode: CompletionAudioMode, sessionId: string, contentType: CompletionAudioContent, text: string) => void,
 ): Promise<void> {
   const mode = completionAudioMode(settings);
   if (mode === 'off') {
     return;
   }
+  const contentType = completionAudioContent(settings);
 
   const text = await buildCompletionAudioText(session, settings);
-  onSourceReady(mode, session.id, text);
+  onSourceReady(mode, session.id, contentType, text);
   if (mode === 'system') {
     await playSystemCompletionAudio(text, tracker);
     return;
@@ -262,8 +263,10 @@ async function playCompletionAudio(
 function SessionsListWrapper() {
   const navigate = useNavigate();
 
-  const handleSelectSession = (sessionId: string) => {
-    navigate(`/chat/${sessionId}`);
+  const handleSelectSession = (sessionId: string, initialMessage?: string) => {
+    navigate(`/chat/${sessionId}`, {
+      state: initialMessage ? { initialMessage } : undefined,
+    });
   };
 
   return (
@@ -288,6 +291,7 @@ function AppLayout() {
   const [notifications, setNotifications] = useState<CompletionNotification[]>([]);
   const [completionSettings, setCompletionSettings] = useState<Record<string, string>>({});
   const [audioPlayback, setAudioPlayback] = useState<AudioPlaybackState>(defaultAudioPlaybackState);
+  const [appTitle, setAppTitle] = useState(() => getAppTitle());
 
   const isSidebarOpen = isMobile ? isMobileSidebarOpen : isDesktopSidebarOpen;
 
@@ -341,13 +345,15 @@ function AppLayout() {
     });
   }, []);
 
-  const onPlaybackSourceReady = useCallback((mode: CompletionAudioMode, sessionId: string, text: string) => {
+  const onPlaybackSourceReady = useCallback((mode: CompletionAudioMode, sessionId: string, contentType: CompletionAudioContent, text: string) => {
     setAudioPlayback({
-      isActive: false,
+      isActive: true,
       isPaused: false,
+      isQueued: true,
       mode,
       sessionId,
       text,
+      contentType,
       charIndex: 0,
       progress: 0,
     });
@@ -360,6 +366,7 @@ function AppLayout() {
         mode,
         isActive: true,
         isPaused: false,
+        isQueued: false,
       }));
     },
     onProgress: (charIndex, progress) => {
@@ -373,19 +380,20 @@ function AppLayout() {
       setAudioPlayback((previous) => ({ ...previous, isPaused: true }));
     },
     onResume: () => {
-      setAudioPlayback((previous) => ({ ...previous, isPaused: false, isActive: true }));
+      setAudioPlayback((previous) => ({ ...previous, isPaused: false, isActive: true, isQueued: false }));
     },
     onEnd: () => {
       setAudioPlayback((previous) => ({
         ...previous,
         isActive: false,
         isPaused: false,
+        isQueued: false,
         charIndex: previous.text.length,
         progress: 1,
       }));
     },
     onError: () => {
-      setAudioPlayback((previous) => ({ ...previous, isActive: false, isPaused: false }));
+      setAudioPlayback((previous) => ({ ...previous, isActive: false, isPaused: false, isQueued: false }));
     },
   }), []);
 
@@ -395,6 +403,10 @@ function AppLayout() {
     resume: resumeActivePlayback,
     stop: stopActivePlayback,
   }), [audioPlayback, pauseActivePlayback, resumeActivePlayback, stopActivePlayback]);
+
+  useEffect(() => {
+    document.title = appTitle;
+  }, [appTitle]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
@@ -588,6 +600,11 @@ function AppLayout() {
     }
   };
 
+  const handleAppTitleChange = useCallback((nextTitle: string) => {
+    const savedTitle = persistAppTitle(nextTitle);
+    setAppTitle(savedTitle);
+  }, []);
+
   const openNotificationSession = (sessionId: string) => {
     navigate(`/chat/${sessionId}`);
   };
@@ -606,15 +623,17 @@ function AppLayout() {
         } as CSSProperties
       }
     >
-      <button
-        type="button"
-        className="sidebar-toggle"
-        onClick={handleToggleSidebar}
-        aria-label={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-        title={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-      >
-        {isSidebarOpen ? '←' : '☰'}
-      </button>
+      {isMobile ? (
+        <button
+          type="button"
+          className="sidebar-toggle sidebar-toggle-mobile"
+          onClick={handleToggleSidebar}
+          aria-label={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+          title={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+        >
+          {isSidebarOpen ? '←' : '☰'}
+        </button>
+      ) : null}
 
       {isMobile && isSidebarOpen ? (
         <button
@@ -626,17 +645,28 @@ function AppLayout() {
       ) : null}
 
       <div className="sidebar-shell">
-        <Sidebar onNavigate={handleSidebarNavigate} />
+        <Sidebar title={appTitle} onTitleChange={handleAppTitleChange} onNavigate={handleSidebarNavigate} />
       </div>
 
-      {!isMobile && isSidebarOpen ? (
+      {!isMobile ? (
         <div
-          className="sidebar-resize-handle"
+          className={`sidebar-resize-handle ${isSidebarOpen ? 'can-resize' : ''}`}
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize sidebar"
-          onPointerDown={handleStartResize}
-        />
+          onPointerDown={isSidebarOpen ? handleStartResize : undefined}
+        >
+          <button
+            type="button"
+            className="sidebar-toggle sidebar-toggle-handle"
+            onClick={handleToggleSidebar}
+            aria-label={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            title={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {isSidebarOpen ? '◀' : '▶'}
+          </button>
+        </div>
       ) : null}
 
       {notifications.length > 0 && (
@@ -669,12 +699,12 @@ function AppLayout() {
         </div>
       )}
 
-      {(audioPlayback.isActive || audioPlayback.isPaused) && (
+      {(audioPlayback.isActive || audioPlayback.isPaused || audioPlayback.isQueued) && (
         <div className="global-playback-bar" role="region" aria-label="Audio playback controls">
           <div className="global-playback-main">
             <div className="global-playback-label">
               {audioPlayback.mode === 'system' ? 'System voice' : 'ElevenLabs'} playing
-              {audioPlayback.isPaused ? ' (paused)' : ''}
+              {audioPlayback.isQueued ? ' (starting)' : audioPlayback.isPaused ? ' (paused)' : ''}
             </div>
             <div className="global-playback-text">
               {audioPlayback.text.slice(0, 160)}
@@ -714,6 +744,7 @@ function AppLayout() {
           <Route path="/my-mind" element={<MyMindView />} />
           <Route path="/thinking" element={<ThinkingView />} />
           <Route path="/providers" element={<ProvidersView />} />
+          <Route path="/providers/fallback-aggregates/new" element={<FallbackAggregateCreateView />} />
           <Route path="/providers/:providerType" element={<ProviderEditView />} />
           <Route path="/settings" element={<SettingsView />} />
         </Routes>

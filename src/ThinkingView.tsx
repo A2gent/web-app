@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { createJob, getJob, getSettings, updateJob, updateSettings } from './api';
+import { createJob, getJob, getSettings, listProviders, updateJob, updateSettings, type LLMProviderType, type ProviderConfig } from './api';
 import {
   buildThinkingFileTaskPrompt,
   THINKING_FILE_PATH_SETTING_KEY,
@@ -38,6 +38,8 @@ function ThinkingView() {
   const [source, setSource] = useState<ThinkingInstructionsSource>('text');
   const [instructionsText, setInstructionsText] = useState('');
   const [instructionsFilePath, setInstructionsFilePath] = useState('');
+  const [providers, setProviders] = useState<ProviderConfig[]>([]);
+  const [llmProvider, setLLMProvider] = useState<LLMProviderType>('openai');
 
   const loadThinkingConfig = useCallback(async () => {
     setLoading(true);
@@ -45,7 +47,10 @@ function ThinkingView() {
     setSuccess(null);
 
     try {
-      const settings = await getSettings();
+      const [settings, availableProviders] = await Promise.all([getSettings(), listProviders()]);
+      const normalizedProviders = availableProviders.filter((provider) => provider.type !== 'fallback_chain');
+      setProviders(normalizedProviders);
+      const activeProvider = (availableProviders.find((provider) => provider.is_active)?.type || 'openai') as LLMProviderType;
       const configuredJobID = (settings[THINKING_JOB_ID_SETTING_KEY] || '').trim();
       const configuredSource = (settings[THINKING_SOURCE_SETTING_KEY] || '').trim();
       const scheduleTextFromSettings = (settings[THINKING_SCHEDULE_TEXT_SETTING_KEY] || '').trim();
@@ -61,6 +66,7 @@ function ThinkingView() {
       const shouldApplyPrefill = prefillFile !== '' && configuredFilePath.trim() === '';
 
       setThinkingJobID(configuredJobID);
+      setLLMProvider(activeProvider);
       setSource(configuredSource === 'file' ? 'file' : 'text');
       setInstructionsText(configuredText);
       setInstructionsFilePath(shouldApplyPrefill ? prefillFile : configuredFilePath);
@@ -78,6 +84,9 @@ function ThinkingView() {
         try {
           const existingJob = await getJob(configuredJobID);
           setEnabled(existingJob.enabled);
+          if (existingJob.llm_provider) {
+            setLLMProvider(existingJob.llm_provider);
+          }
           if (scheduleTextFromSettings === '' && existingJob.schedule_human.trim() !== '') {
             setScheduleText(existingJob.schedule_human.trim());
           }
@@ -129,6 +138,7 @@ function ThinkingView() {
           name: 'Thinking',
           schedule_text: normalizedScheduleText,
           task_prompt: taskPrompt,
+          llm_provider: llmProvider,
           enabled,
         });
         jobID = created.id;
@@ -138,6 +148,7 @@ function ThinkingView() {
             name: 'Thinking',
             schedule_text: normalizedScheduleText,
             task_prompt: taskPrompt,
+            llm_provider: llmProvider,
             enabled,
           });
         } catch (updateError) {
@@ -149,6 +160,7 @@ function ThinkingView() {
             name: 'Thinking',
             schedule_text: normalizedScheduleText,
             task_prompt: taskPrompt,
+            llm_provider: llmProvider,
             enabled,
           });
           jobID = created.id;
@@ -222,6 +234,18 @@ function ThinkingView() {
             />
             <p className="thinking-note">
               Use natural language, for example: every 60 minutes from 8:00 to 23:00
+            </p>
+          </label>
+
+          <label className="thinking-field">
+            <span>LLM Provider</span>
+            <select value={llmProvider} onChange={(event) => setLLMProvider(event.target.value as LLMProviderType)} disabled={saving || providers.length === 0}>
+              {providers.map((provider) => (
+                <option key={provider.type} value={provider.type}>{provider.display_name}</option>
+              ))}
+            </select>
+            <p className="thinking-note">
+              This provider is used only for Thinking job runs.
             </p>
           </label>
 

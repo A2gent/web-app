@@ -1,17 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
+  deleteProvider,
+  listGoogleModels,
   listKimiModels,
   listLMStudioModels,
+  listOpenAIModels,
   listProviders,
   setActiveProvider,
   updateProvider,
+  type FallbackChainNode,
   type LLMProviderType,
   type ProviderConfig,
+  type RouterRule,
 } from './api';
 
+function isFallbackProvider(type?: string): boolean {
+  if (!type) {
+    return false;
+  }
+  return type === 'fallback_chain' || type.startsWith('fallback_chain:');
+}
+
+function isModelQueryableProvider(type: LLMProviderType): boolean {
+  return type === 'lmstudio' || type === 'kimi' || type === 'google' || type === 'openai';
+}
+
 function ProviderEditView() {
-  const { providerType } = useParams<{ providerType: LLMProviderType }>();
+  const { providerType: providerTypeParam } = useParams<{ providerType: LLMProviderType }>();
+  const providerType = providerTypeParam ? decodeURIComponent(providerTypeParam) : undefined;
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -24,20 +41,73 @@ function ProviderEditView() {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
-  const [fallbackChain, setFallbackChain] = useState<LLMProviderType[]>([]);
-  const [candidateNode, setCandidateNode] = useState<LLMProviderType>('kimi');
+
+  const [fallbackChain, setFallbackChain] = useState<FallbackChainNode[]>([]);
+  const [candidateNode, setCandidateNode] = useState<LLMProviderType>('openai');
+  const [candidateNodeModel, setCandidateNodeModel] = useState('');
+  const [candidateNodeModels, setCandidateNodeModels] = useState<string[]>([]);
+  const [isLoadingCandidateNodeModels, setIsLoadingCandidateNodeModels] = useState(false);
+
+  const [routerProvider, setRouterProvider] = useState<LLMProviderType>('');
+  const [routerModel, setRouterModel] = useState('');
+  const [routerProviderModels, setRouterProviderModels] = useState<string[]>([]);
+  const [isLoadingRouterModels, setIsLoadingRouterModels] = useState(false);
+  const [routingRules, setRoutingRules] = useState<RouterRule[]>([]);
+  const [routingMatch, setRoutingMatch] = useState('');
+  const [routingTargetProvider, setRoutingTargetProvider] = useState<LLMProviderType>('');
+  const [routingTargetModel, setRoutingTargetModel] = useState('');
+  const [routingTargetModels, setRoutingTargetModels] = useState<string[]>([]);
+  const [isLoadingRoutingTargetModels, setIsLoadingRoutingTargetModels] = useState(false);
 
   const selected = useMemo(
     () => providers.find((provider) => provider.type === providerType),
     [providers, providerType],
   );
+
+  const isAutomaticRouter = selected?.type === 'automatic_router';
   const isLMStudio = selected?.type === 'lmstudio';
   const isKimi = selected?.type === 'kimi';
-  const isFallback = selected?.type === 'fallback_chain';
+  const isGoogle = selected?.type === 'google';
+  const isOpenAI = selected?.type === 'openai';
+  const isFallback = isFallbackProvider(selected?.type);
+  const isNamedFallbackAggregate = selected?.type ? selected.type.startsWith('fallback_chain:') : false;
+
   const nonAggregateProviders = useMemo(
-    () => providers.filter((provider) => provider.type !== 'fallback_chain'),
+    () => providers.filter((provider) => !isFallbackProvider(provider.type) && provider.type !== 'automatic_router'),
     [providers],
   );
+
+  const eligibleTargetProviders = useMemo(
+    () => providers.filter((provider) => provider.type !== 'automatic_router'),
+    [providers],
+  );
+
+  const loadProviderModels = async (provider: ProviderConfig | undefined): Promise<string[]> => {
+    if (!provider) {
+      return [];
+    }
+    const options = new Set<string>();
+    [provider.model, provider.default_model]
+      .map((value) => value.trim())
+      .filter((value) => value !== '')
+      .forEach((value) => options.add(value));
+
+    try {
+      if (provider.type === 'lmstudio') {
+        (await listLMStudioModels(provider.base_url)).forEach((name) => options.add(name));
+      } else if (provider.type === 'kimi') {
+        (await listKimiModels(provider.base_url)).forEach((name) => options.add(name));
+      } else if (provider.type === 'google') {
+        (await listGoogleModels(provider.base_url)).forEach((name) => options.add(name));
+      } else if (provider.type === 'openai') {
+        (await listOpenAIModels(provider.base_url)).forEach((name) => options.add(name));
+      }
+    } catch {
+      // Keep saved/default options when model querying fails.
+    }
+
+    return Array.from(options);
+  };
 
   const loadProviders = async () => {
     try {
@@ -54,22 +124,43 @@ function ProviderEditView() {
   };
 
   useEffect(() => {
-    loadProviders();
+    void loadProviders();
   }, []);
 
   useEffect(() => {
     if (!selected) return;
-    if (selected.type === 'fallback_chain') {
-      const initialChain = (selected.fallback_chain || []).filter((node) => node !== 'fallback_chain');
+
+    if (isFallbackProvider(selected.type)) {
+      const initialChain = (selected.fallback_chain || []).filter((node) => node.provider !== 'fallback_chain');
       setFallbackChain(initialChain);
-      const firstCandidate = nonAggregateProviders.find((provider) => provider.configured)?.type || nonAggregateProviders[0]?.type || 'kimi';
+      const firstCandidate = nonAggregateProviders.find((provider) => provider.configured)?.type || nonAggregateProviders[0]?.type || 'openai';
       setCandidateNode(firstCandidate);
+      const provider = nonAggregateProviders.find((item) => item.type === firstCandidate);
+      setCandidateNodeModel(provider?.model || provider?.default_model || '');
       setApiKey('');
       setBaseURL('');
       setModel('');
       setAvailableModels([]);
       setModelsError(null);
       setIsLoadingModels(false);
+      return;
+    }
+
+    if (selected.type === 'automatic_router') {
+      const firstRouterProvider = eligibleTargetProviders.find((provider) => provider.configured)?.type || eligibleTargetProviders[0]?.type || '';
+      const configuredRouterProvider = selected.router_provider && selected.router_provider.trim() !== '' ? selected.router_provider : firstRouterProvider;
+      setRouterProvider(configuredRouterProvider);
+      setRouterModel(selected.router_model || '');
+      setRoutingRules(selected.router_rules || []);
+      const firstTarget = eligibleTargetProviders.find((provider) => provider.configured)?.type || eligibleTargetProviders[0]?.type || '';
+      setRoutingTargetProvider(firstTarget);
+      setRoutingTargetModel('');
+      setRoutingMatch('');
+      setApiKey('');
+      setBaseURL('');
+      setModel('');
+      setAvailableModels([]);
+      setModelsError(null);
       return;
     }
 
@@ -80,12 +171,11 @@ function ProviderEditView() {
     setAvailableModels([]);
     setModelsError(null);
 
-    if (selected.type !== 'lmstudio' && selected.type !== 'kimi') return;
+    if (!isModelQueryableProvider(selected.type)) return;
 
     let canceled = false;
     setIsLoadingModels(true);
-    const modelLoader = selected.type === 'lmstudio' ? listLMStudioModels : listKimiModels;
-    modelLoader(initialBaseURL)
+    void loadProviderModels(selected)
       .then((models) => {
         if (canceled) return;
         setAvailableModels(models);
@@ -103,17 +193,100 @@ function ProviderEditView() {
     return () => {
       canceled = true;
     };
-  }, [selected, nonAggregateProviders]);
+  }, [selected, nonAggregateProviders, eligibleTargetProviders]);
 
-  const handleQueryModels = async () => {
-    if (!selected || (selected.type !== 'lmstudio' && selected.type !== 'kimi')) {
+  const loadCandidateNodeModels = async (providerTypeValue: LLMProviderType) => {
+    const provider = nonAggregateProviders.find((item) => item.type === providerTypeValue);
+    if (!provider) {
+      setCandidateNodeModels([]);
+      setCandidateNodeModel('');
       return;
     }
-    const modelLoader = selected.type === 'lmstudio' ? listLMStudioModels : listKimiModels;
+
+    setIsLoadingCandidateNodeModels(true);
+    const options = await loadProviderModels(provider);
+    setIsLoadingCandidateNodeModels(false);
+    setCandidateNodeModels(options);
+    setCandidateNodeModel((current) => (current.trim() !== '' && options.includes(current.trim()) ? current.trim() : (options[0] || '')));
+  };
+
+  useEffect(() => {
+    if (!isFallback || candidateNode.trim() === '') {
+      return;
+    }
+    void loadCandidateNodeModels(candidateNode);
+  }, [isFallback, candidateNode, nonAggregateProviders]);
+
+  useEffect(() => {
+    if (!isAutomaticRouter || routerProvider.trim() === '') {
+      return;
+    }
+    const provider = eligibleTargetProviders.find((item) => item.type === routerProvider);
+    if (!provider || isFallbackProvider(provider.type)) {
+      setRouterProviderModels([]);
+      setRouterModel('');
+      return;
+    }
+
+    let canceled = false;
+    setIsLoadingRouterModels(true);
+    void loadProviderModels(provider)
+      .then((options) => {
+        if (canceled) return;
+        setRouterProviderModels(options);
+        setRouterModel((current) => (current.trim() !== '' ? current.trim() : (options[0] || provider.model || provider.default_model || '')));
+      })
+      .finally(() => {
+        if (canceled) return;
+        setIsLoadingRouterModels(false);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [isAutomaticRouter, routerProvider, eligibleTargetProviders]);
+
+  useEffect(() => {
+    if (!isAutomaticRouter || routingTargetProvider.trim() === '') {
+      return;
+    }
+    const provider = eligibleTargetProviders.find((item) => item.type === routingTargetProvider);
+    if (!provider || isFallbackProvider(provider.type)) {
+      setRoutingTargetModels([]);
+      setRoutingTargetModel('');
+      return;
+    }
+
+    let canceled = false;
+    setIsLoadingRoutingTargetModels(true);
+    void loadProviderModels(provider)
+      .then((options) => {
+        if (canceled) return;
+        setRoutingTargetModels(options);
+        setRoutingTargetModel((current) => (current.trim() !== '' ? current.trim() : (options[0] || provider.model || provider.default_model || '')));
+      })
+      .finally(() => {
+        if (canceled) return;
+        setIsLoadingRoutingTargetModels(false);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [isAutomaticRouter, routingTargetProvider, eligibleTargetProviders]);
+
+  const handleQueryModels = async () => {
+    if (!selected || !isModelQueryableProvider(selected.type)) {
+      return;
+    }
+    const providerForQuery: ProviderConfig = {
+      ...selected,
+      base_url: baseURL,
+    };
     try {
       setIsLoadingModels(true);
       setModelsError(null);
-      const models = await modelLoader(baseURL);
+      const models = await loadProviderModels(providerForQuery);
       setAvailableModels(models);
     } catch (err) {
       console.error(`Failed to load ${selected.type} models:`, err);
@@ -130,19 +303,32 @@ function ProviderEditView() {
       setIsSaving(true);
       setError(null);
       setSuccess(null);
+
       const payload = isFallback
         ? {
+            name: isNamedFallbackAggregate ? selected?.display_name : undefined,
             fallback_chain: fallbackChain,
           }
-        : {
-            api_key: apiKey.trim() === '' ? undefined : apiKey.trim(),
-            base_url: baseURL.trim(),
-            model: model.trim(),
-          };
+        : isAutomaticRouter
+          ? {
+              router_provider: routerProvider,
+              router_model: isFallbackProvider(routerProvider) ? '' : routerModel.trim(),
+              router_rules: routingRules.map((rule) => ({
+                match: rule.match.trim(),
+                provider: rule.provider,
+                model: isFallbackProvider(rule.provider) ? '' : (rule.model || '').trim(),
+              })),
+            }
+          : {
+              api_key: apiKey.trim() === '' ? undefined : apiKey.trim(),
+              base_url: baseURL.trim(),
+              model: model.trim(),
+            };
+
       const updated = await updateProvider(providerType, payload);
       setProviders(updated);
       setApiKey('');
-      setSuccess(isFallback ? 'Fallback chain updated.' : 'Provider updated.');
+      setSuccess(isFallback ? 'Fallback chain updated.' : isAutomaticRouter ? 'Automatic router updated.' : 'Provider updated.');
     } catch (err) {
       console.error('Failed to update provider:', err);
       setError(err instanceof Error ? err.message : 'Failed to update provider');
@@ -152,34 +338,39 @@ function ProviderEditView() {
   };
 
   const handleAddFallbackNode = () => {
-    if (candidateNode === 'fallback_chain') {
-      return;
-    }
     const candidate = nonAggregateProviders.find((provider) => provider.type === candidateNode);
     if (!candidate?.configured) {
       return;
     }
-    if (fallbackChain.includes(candidateNode)) {
+    const modelForNode = candidateNodeModel.trim();
+    if (modelForNode === '') {
       return;
     }
-    setFallbackChain((prev) => [...prev, candidateNode]);
-  };
-
-  const handleRemoveFallbackNode = (index: number) => {
-    setFallbackChain((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  const handleMoveFallbackNode = (index: number, direction: -1 | 1) => {
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= fallbackChain.length) {
+    if (fallbackChain.some((node) => node.provider === candidateNode && node.model === modelForNode)) {
       return;
     }
-    setFallbackChain((prev) => {
-      const next = [...prev];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next;
-    });
+    setFallbackChain((prev) => [...prev, { provider: candidateNode, model: modelForNode }]);
+  };
+
+  const handleAddRoutingRule = () => {
+    const match = routingMatch.trim();
+    if (match === '' || routingTargetProvider.trim() === '') {
+      return;
+    }
+    const targetIsFallback = isFallbackProvider(routingTargetProvider);
+    const nextModel = targetIsFallback ? '' : routingTargetModel.trim();
+    if (!targetIsFallback && nextModel === '') {
+      return;
+    }
+    setRoutingRules((prev) => [
+      ...prev,
+      {
+        match,
+        provider: routingTargetProvider,
+        model: nextModel,
+      },
+    ]);
+    setRoutingMatch('');
   };
 
   const handleSetActive = async () => {
@@ -194,6 +385,26 @@ function ProviderEditView() {
     } catch (err) {
       console.error('Failed to set active provider:', err);
       setError(err instanceof Error ? err.message : 'Failed to set active provider');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteAggregate = async () => {
+    if (!selected || !isFallbackProvider(selected.type)) {
+      return;
+    }
+    if (!confirm(`Delete fallback aggregate "${selected.display_name}"?`)) {
+      return;
+    }
+    try {
+      setIsSaving(true);
+      setError(null);
+      await deleteProvider(selected.type);
+      window.location.href = '/providers';
+    } catch (err) {
+      console.error('Failed to delete provider:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete provider');
     } finally {
       setIsSaving(false);
     }
@@ -243,7 +454,7 @@ function ProviderEditView() {
             </div>
           </div>
 
-          {!isLMStudio && !isFallback ? (
+          {!isLMStudio && !isFallback && !isAutomaticRouter ? (
             <label className="settings-field">
               <span>API key</span>
               <input
@@ -254,22 +465,39 @@ function ProviderEditView() {
                 autoComplete="off"
                 disabled={!selected.requires_key}
               />
+              {isOpenAI ? (
+                <span className="thinking-note">
+                  Get an API key from{' '}
+                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer noopener">
+                    platform.openai.com/api-keys
+                  </a>
+                  .
+                </span>
+              ) : null}
             </label>
           ) : null}
 
-          {!isFallback ? (
+          {!isFallback && !isAutomaticRouter ? (
             <label className="settings-field">
               <span>Base URL</span>
               <input type="text" value={baseURL} onChange={(e) => setBaseURL(e.target.value)} autoComplete="off" />
             </label>
           ) : null}
 
-          {(isLMStudio || isKimi) && !isFallback ? (
+          {(isLMStudio || isKimi || isGoogle || isOpenAI) && !isFallback && !isAutomaticRouter ? (
             <div className="settings-field">
               <span>Default model</span>
               <div className="provider-model-query-row">
                 <select value={model} onChange={(e) => setModel(e.target.value)} disabled={isLoadingModels}>
-                  <option value="">{isLMStudio ? 'Select a loaded LM Studio model' : 'Select a loaded Kimi model'}</option>
+                  <option value="">
+                    {isLMStudio
+                      ? 'Select a loaded LM Studio model'
+                      : isGoogle
+                        ? 'Select a loaded Gemini model'
+                        : isOpenAI
+                          ? 'Select an OpenAI model'
+                          : 'Select a loaded Kimi model'}
+                  </option>
                   {model.trim() !== '' && !availableModels.includes(model) ? (
                     <option value={model}>{model}</option>
                   ) : null}
@@ -290,14 +518,14 @@ function ProviderEditView() {
               </div>
               {modelsError ? <span className="settings-inline-error">{modelsError}</span> : null}
             </div>
-          ) : !isFallback ? (
+          ) : !isFallback && !isAutomaticRouter ? (
             <label className="settings-field">
               <span>Default model</span>
               <input type="text" value={model} onChange={(e) => setModel(e.target.value)} autoComplete="off" />
             </label>
           ) : null}
 
-          {isLMStudio && !isFallback ? (
+          {isLMStudio && !isFallback && !isAutomaticRouter ? (
             <label className="settings-field">
               <span>API key (optional)</span>
               <input
@@ -310,15 +538,117 @@ function ProviderEditView() {
             </label>
           ) : null}
 
+          {isAutomaticRouter ? (
+            <>
+              <div className="settings-field">
+                <span>Router model provider</span>
+                <select value={routerProvider} onChange={(event) => setRouterProvider(event.target.value)}>
+                  {eligibleTargetProviders.map((provider) => (
+                    <option key={provider.type} value={provider.type} disabled={!provider.configured}>
+                      {provider.display_name} {provider.configured ? '' : '(not configured)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {!isFallbackProvider(routerProvider) ? (
+                <div className="settings-field">
+                  <span>Router model</span>
+                  <div className="provider-model-query-row">
+                    <select value={routerModel} onChange={(event) => setRouterModel(event.target.value)} disabled={isLoadingRouterModels}>
+                      <option value="">Select model</option>
+                      {routerProviderModels.map((modelName) => (
+                        <option key={modelName} value={modelName}>{modelName}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="settings-field">
+                <span>Routing rules</span>
+                <div className="provider-fallback-compose-row">
+                  <input
+                    type="text"
+                    value={routingMatch}
+                    onChange={(event) => setRoutingMatch(event.target.value)}
+                    placeholder="Task context (e.g. coding, marketing)"
+                  />
+                  <select value={routingTargetProvider} onChange={(event) => setRoutingTargetProvider(event.target.value)}>
+                    {eligibleTargetProviders.map((provider) => (
+                      <option key={provider.type} value={provider.type} disabled={!provider.configured}>
+                        {provider.display_name} {provider.configured ? '' : '(not configured)'}
+                      </option>
+                    ))}
+                  </select>
+                  {!isFallbackProvider(routingTargetProvider) ? (
+                    <select
+                      value={routingTargetModel}
+                      onChange={(event) => setRoutingTargetModel(event.target.value)}
+                      disabled={isLoadingRoutingTargetModels}
+                    >
+                      <option value="">Select model</option>
+                      {routingTargetModels.map((modelName) => (
+                        <option key={modelName} value={modelName}>{modelName}</option>
+                      ))}
+                    </select>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="settings-add-btn"
+                    onClick={handleAddRoutingRule}
+                    disabled={routingMatch.trim() === '' || routingTargetProvider.trim() === '' || (!isFallbackProvider(routingTargetProvider) && routingTargetModel.trim() === '')}
+                  >
+                    Add rule
+                  </button>
+                </div>
+
+                <div className="provider-fallback-chain-list">
+                  {routingRules.map((rule, index) => {
+                    const provider = eligibleTargetProviders.find((item) => item.type === rule.provider);
+                    return (
+                      <div key={`${rule.match}-${rule.provider}-${rule.model || ''}-${index}`} className="provider-fallback-chain-item">
+                        <span className="provider-fallback-index">{index + 1}.</span>
+                        <span className="provider-fallback-label">
+                          "{rule.match}" → {provider?.display_name || rule.provider}{rule.model ? ` / ${rule.model}` : ''}
+                        </span>
+                        <div className="provider-fallback-actions">
+                          <button
+                            type="button"
+                            className="settings-remove-btn"
+                            onClick={() => setRoutingRules((prev) => prev.filter((_, idx) => idx !== index))}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {routingRules.length === 0 ? <div className="provider-fallback-empty">No routing rules configured yet.</div> : null}
+                </div>
+              </div>
+            </>
+          ) : null}
+
           {isFallback ? (
             <div className="settings-field">
               <span>Fallback nodes (in order)</span>
               <div className="provider-fallback-compose-row">
-                <select value={candidateNode} onChange={(e) => setCandidateNode(e.target.value as LLMProviderType)}>
+                <select value={candidateNode} onChange={(e) => {
+                  const nextProvider = e.target.value as LLMProviderType;
+                  setCandidateNode(nextProvider);
+                  const provider = nonAggregateProviders.find((item) => item.type === nextProvider);
+                  setCandidateNodeModel(provider?.model || provider?.default_model || '');
+                }}>
                   {nonAggregateProviders.map((provider) => (
-                    <option key={provider.type} value={provider.type} disabled={!provider.configured || fallbackChain.includes(provider.type)}>
+                    <option key={provider.type} value={provider.type} disabled={!provider.configured}>
                       {provider.display_name} {provider.configured ? '' : '(not configured)'}
                     </option>
+                  ))}
+                </select>
+                <select value={candidateNodeModel} onChange={(e) => setCandidateNodeModel(e.target.value)} disabled={isLoadingCandidateNodeModels}>
+                  {candidateNodeModels.map((modelName) => (
+                    <option key={modelName} value={modelName}>{modelName}</option>
                   ))}
                 </select>
                 <button
@@ -326,8 +656,8 @@ function ProviderEditView() {
                   className="settings-add-btn"
                   onClick={handleAddFallbackNode}
                   disabled={
-                    candidateNode === 'fallback_chain' ||
-                    fallbackChain.includes(candidateNode) ||
+                    candidateNodeModel.trim() === '' ||
+                    fallbackChain.some((node) => node.provider === candidateNode && node.model === candidateNodeModel.trim()) ||
                     !nonAggregateProviders.find((provider) => provider.type === candidateNode)?.configured
                   }
                 >
@@ -336,16 +666,25 @@ function ProviderEditView() {
               </div>
               <div className="provider-fallback-chain-list">
                 {fallbackChain.map((node, index) => {
-                  const provider = nonAggregateProviders.find((item) => item.type === node);
+                  const provider = nonAggregateProviders.find((item) => item.type === node.provider);
                   return (
-                    <div key={`${node}-${index}`} className="provider-fallback-chain-item">
+                    <div key={`${node.provider}-${node.model}-${index}`} className="provider-fallback-chain-item">
                       <span className="provider-fallback-index">{index + 1}.</span>
-                      <span className="provider-fallback-label">{provider?.display_name || node}</span>
+                      <span className="provider-fallback-label">{provider?.display_name || node.provider} / {node.model}</span>
                       <div className="provider-fallback-actions">
                         <button
                           type="button"
                           className="settings-add-btn"
-                          onClick={() => handleMoveFallbackNode(index, -1)}
+                          onClick={() => {
+                            const nextIndex = index - 1;
+                            if (nextIndex < 0) return;
+                            setFallbackChain((prev) => {
+                              const next = [...prev];
+                              const [item] = next.splice(index, 1);
+                              next.splice(nextIndex, 0, item);
+                              return next;
+                            });
+                          }}
                           disabled={index === 0}
                         >
                           Up
@@ -353,12 +692,21 @@ function ProviderEditView() {
                         <button
                           type="button"
                           className="settings-add-btn"
-                          onClick={() => handleMoveFallbackNode(index, 1)}
+                          onClick={() => {
+                            const nextIndex = index + 1;
+                            if (nextIndex >= fallbackChain.length) return;
+                            setFallbackChain((prev) => {
+                              const next = [...prev];
+                              const [item] = next.splice(index, 1);
+                              next.splice(nextIndex, 0, item);
+                              return next;
+                            });
+                          }}
                           disabled={index === fallbackChain.length - 1}
                         >
                           Down
                         </button>
-                        <button type="button" className="settings-remove-btn" onClick={() => handleRemoveFallbackNode(index)}>
+                        <button type="button" className="settings-remove-btn" onClick={() => setFallbackChain((prev) => prev.filter((_, idx) => idx !== index))}>
                           Remove
                         </button>
                       </div>
@@ -378,7 +726,11 @@ function ProviderEditView() {
               type="button"
               className="settings-save-btn"
               onClick={handleSave}
-              disabled={isSaving || (isFallback && fallbackChain.length < 2)}
+              disabled={
+                isSaving ||
+                (isFallback && fallbackChain.length < 2) ||
+                (isAutomaticRouter && (routerProvider.trim() === '' || routingRules.length === 0 || (!isFallbackProvider(routerProvider) && routerModel.trim() === '')))
+              }
             >
               {isSaving ? 'Saving...' : 'Save'}
             </button>
@@ -390,6 +742,16 @@ function ProviderEditView() {
             >
               Set active
             </button>
+            {isFallback ? (
+              <button
+                type="button"
+                className="settings-remove-btn"
+                onClick={handleDeleteAggregate}
+                disabled={isSaving}
+              >
+                Delete aggregate
+              </button>
+            ) : null}
           </div>
 
           {success && <div className="settings-success">{success}</div>}

@@ -87,11 +87,38 @@ function renderInlineMarkdown(value: string): string {
   return text;
 }
 
+function parseTableCells(line: string): string[] | null {
+  if (!line.includes('|')) {
+    return null;
+  }
+
+  let value = line.trim();
+  if (value.startsWith('|')) {
+    value = value.slice(1);
+  }
+  if (value.endsWith('|')) {
+    value = value.slice(0, -1);
+  }
+
+  const cells = value.split('|').map((cell) => cell.trim());
+  return cells.length > 0 ? cells : null;
+}
+
+function isTableSeparator(line: string, expectedCells: number): boolean {
+  const cells = parseTableCells(line);
+  if (!cells || cells.length !== expectedCells) {
+    return false;
+  }
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
 function renderMarkdownToHtml(markdown: string): string {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const html: string[] = [];
   let inList = false;
   let inCodeFence = false;
+  let inTable = false;
+  let tableColumns = 0;
   const headingCounts = new Map<string, number>();
 
   const closeList = () => {
@@ -101,9 +128,19 @@ function renderMarkdownToHtml(markdown: string): string {
     }
   };
 
-  for (const line of lines) {
+  const closeTable = () => {
+    if (inTable) {
+      html.push('</tbody></table>');
+      inTable = false;
+      tableColumns = 0;
+    }
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     if (line.startsWith('```')) {
       closeList();
+      closeTable();
       if (!inCodeFence) {
         html.push('<pre><code>');
         inCodeFence = true;
@@ -122,7 +159,42 @@ function renderMarkdownToHtml(markdown: string): string {
     const trimmed = line.trim();
     if (trimmed === '') {
       closeList();
+      closeTable();
       continue;
+    }
+
+    if (!inTable) {
+      const headerCells = parseTableCells(trimmed);
+      if (headerCells && index + 1 < lines.length && isTableSeparator(lines[index + 1].trim(), headerCells.length)) {
+        closeList();
+        inTable = true;
+        tableColumns = headerCells.length;
+        html.push('<table class="md-table"><thead><tr>');
+        for (const cell of headerCells) {
+          html.push(`<th>${renderInlineMarkdown(cell)}</th>`);
+        }
+        html.push('</tr></thead><tbody>');
+        index += 1;
+        continue;
+      }
+    }
+
+    if (inTable) {
+      const rowCells = parseTableCells(trimmed);
+      if (rowCells) {
+        const normalizedCells = [...rowCells];
+        while (normalizedCells.length < tableColumns) {
+          normalizedCells.push('');
+        }
+        normalizedCells.length = tableColumns;
+        html.push('<tr>');
+        for (const cell of normalizedCells) {
+          html.push(`<td>${renderInlineMarkdown(cell)}</td>`);
+        }
+        html.push('</tr>');
+        continue;
+      }
+      closeTable();
     }
 
     const headingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed);
@@ -157,6 +229,9 @@ function renderMarkdownToHtml(markdown: string): string {
   }
   if (inList) {
     html.push('</ul>');
+  }
+  if (inTable) {
+    html.push('</tbody></table>');
   }
 
   return html.join('\n');
