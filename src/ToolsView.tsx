@@ -24,6 +24,8 @@ import {
   ELEVENLABS_SPEED_OPTIONS,
   ELEVENLABS_VOICE_ID,
   PIPER_MODEL,
+  WHISPER_LANGUAGE,
+  WHISPER_TRANSLATE,
   SCREENSHOT_DISPLAY_INDEX,
   SCREENSHOT_OUTPUT_DIR,
   speedToOptionIndex,
@@ -115,6 +117,8 @@ function ToolsView() {
   const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState('');
   const [elevenLabsSpeed, setElevenLabsSpeed] = useState('1.0');
   const [piperModel, setPiperModel] = useState('en_US-lessac-medium');
+  const [whisperLanguage, setWhisperLanguage] = useState('auto');
+  const [whisperTranslateToEnglish, setWhisperTranslateToEnglish] = useState(false);
   const [screenshotOutputDir, setScreenshotOutputDir] = useState('/tmp');
   const [screenshotDisplayIndex, setScreenshotDisplayIndex] = useState('');
   const [cameraOutputDir, setCameraOutputDir] = useState('/tmp');
@@ -195,6 +199,8 @@ function ToolsView() {
       setElevenLabsVoiceId(loaded[ELEVENLABS_VOICE_ID] || '');
       setElevenLabsSpeed(loaded[ELEVENLABS_SPEED] || '1.0');
       setPiperModel(loaded[PIPER_MODEL] || 'en_US-lessac-medium');
+      setWhisperLanguage((loaded[WHISPER_LANGUAGE] || 'auto').trim() || 'auto');
+      setWhisperTranslateToEnglish((loaded[WHISPER_TRANSLATE] || '').trim().toLowerCase() === 'true');
       setScreenshotOutputDir(loaded[SCREENSHOT_OUTPUT_DIR] || '/tmp');
       setScreenshotDisplayIndex(loaded[SCREENSHOT_DISPLAY_INDEX] || '');
       setCameraOutputDir(loaded[CAMERA_OUTPUT_DIR] || '/tmp');
@@ -454,6 +460,13 @@ function ToolsView() {
     } else {
       payload[PIPER_MODEL] = trimmedPiperModel;
     }
+    const selectedWhisperLang = whisperLanguage.trim().toLowerCase();
+    if (selectedWhisperLang === '' || selectedWhisperLang === 'auto') {
+      delete payload[WHISPER_LANGUAGE];
+    } else {
+      payload[WHISPER_LANGUAGE] = selectedWhisperLang;
+    }
+    payload[WHISPER_TRANSLATE] = whisperTranslateToEnglish ? 'true' : 'false';
     const screenshotDir = screenshotOutputDir.trim();
     if (screenshotDir === '') {
       delete payload[SCREENSHOT_OUTPUT_DIR];
@@ -730,6 +743,50 @@ function ToolsView() {
                             </div>
                           ) : null}
                           {piperVoicesError ? <div className="settings-error">{piperVoicesError}</div> : null}
+                        </div>
+                      </details>
+                    ) : null}
+                    {skill.name === 'whisper_stt' ? (
+                      <details className="skill-tool-details">
+                        <summary>Configure defaults</summary>
+                        <p>Defaults used by <code>whisper_stt</code> and mic transcription.</p>
+                        <div className="settings-group">
+                          <label className="settings-field">
+                            <span>Default transcription language</span>
+                            <select
+                              value={whisperLanguage}
+                              onChange={(event) => setWhisperLanguage(event.target.value)}
+                            >
+                              <option value="auto">Auto-detect</option>
+                              <option value="en">English</option>
+                              <option value="ru">Russian</option>
+                              <option value="uk">Ukrainian</option>
+                              <option value="de">German</option>
+                              <option value="fr">French</option>
+                              <option value="es">Spanish</option>
+                              <option value="it">Italian</option>
+                              <option value="pt">Portuguese</option>
+                              <option value="pl">Polish</option>
+                              <option value="tr">Turkish</option>
+                              <option value="ja">Japanese</option>
+                              <option value="ko">Korean</option>
+                              <option value="zh">Chinese</option>
+                            </select>
+                            <div className="settings-help">
+                              Saved as <code>AAGENT_WHISPER_LANGUAGE</code>. Use <code>ru</code> to keep Russian text in Russian.
+                            </div>
+                          </label>
+                          <label className="settings-field settings-checkbox">
+                            <span>Translate transcript to English</span>
+                            <input
+                              type="checkbox"
+                              checked={whisperTranslateToEnglish}
+                              onChange={(event) => setWhisperTranslateToEnglish(event.target.checked)}
+                            />
+                            <div className="settings-help">
+                              Saved as <code>AAGENT_WHISPER_TRANSLATE</code>. Turn this off to keep original language output.
+                            </div>
+                          </label>
                         </div>
                       </details>
                     ) : null}

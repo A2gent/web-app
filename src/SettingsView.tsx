@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import SettingsPanel from './SettingsPanel';
-import { getApiBaseUrl, getSettings, setApiBaseUrl, updateSettings } from './api';
+import { getApiBaseUrl, getSettingsPayload, setApiBaseUrl, updateSettings } from './api';
 
 function SettingsView() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [defaultSystemPrompt, setDefaultSystemPrompt] = useState('');
+  const [defaultSystemPromptWithoutBuiltInTools, setDefaultSystemPromptWithoutBuiltInTools] = useState('');
   const [apiBaseUrlInput, setApiBaseUrlInput] = useState(() => getApiBaseUrl());
   const [apiBaseUrlMessage, setApiBaseUrlMessage] = useState<string | null>(null);
 
@@ -14,8 +16,10 @@ function SettingsView() {
     try {
       setIsLoading(true);
       setError(null);
-      const settingsData = await getSettings();
-      setSettings(settingsData);
+      const payload = await getSettingsPayload();
+      setSettings(payload.settings || {});
+      setDefaultSystemPrompt((payload.defaultSystemPrompt || '').trim());
+      setDefaultSystemPromptWithoutBuiltInTools((payload.defaultSystemPromptWithoutBuiltInTools || '').trim());
     } catch (err) {
       console.error('Failed to load settings:', err);
       setError(err instanceof Error ? err.message : 'Failed to load settings');
@@ -103,7 +107,13 @@ function SettingsView() {
         {isLoading ? (
           <div className="sessions-loading">Loading settings...</div>
         ) : (
-          <SettingsPanel settings={settings} isSaving={isSaving} onSave={handleSaveSettings} />
+          <SettingsPanel
+            settings={settings}
+            isSaving={isSaving}
+            onSave={handleSaveSettings}
+            defaultSystemPrompt={defaultSystemPrompt}
+            defaultSystemPromptWithoutBuiltInTools={defaultSystemPromptWithoutBuiltInTools}
+          />
         )}
       </div>
     </div>

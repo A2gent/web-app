@@ -224,6 +224,14 @@ export interface UpdateProjectRequest {
 
 export interface SettingsResponse {
   settings: Record<string, string>;
+  defaultSystemPrompt?: string;
+  defaultSystemPromptWithoutBuiltInTools?: string;
+}
+
+export interface SettingsPayload {
+  settings: Record<string, string>;
+  defaultSystemPrompt?: string;
+  defaultSystemPromptWithoutBuiltInTools?: string;
 }
 
 export interface MindConfigResponse {
@@ -828,12 +836,21 @@ export async function listJobSessions(jobId: string): Promise<Session[]> {
 // --- Settings API ---
 
 export async function getSettings(): Promise<Record<string, string>> {
+  const data = await getSettingsPayload();
+  return data.settings || {};
+}
+
+export async function getSettingsPayload(): Promise<SettingsPayload> {
   const response = await fetch(`${getApiBaseUrl()}/settings`);
   if (!response.ok) {
     throw new Error(`Failed to get settings: ${response.statusText}`);
   }
   const data: SettingsResponse = await response.json();
-  return data.settings || {};
+  return {
+    settings: data.settings || {},
+    defaultSystemPrompt: data.defaultSystemPrompt,
+    defaultSystemPromptWithoutBuiltInTools: data.defaultSystemPromptWithoutBuiltInTools,
+  };
 }
 
 export async function updateSettings(settings: Record<string, string>): Promise<Record<string, string>> {

@@ -20,6 +20,8 @@ interface SettingsPanelProps {
   settings: Record<string, string>;
   isSaving: boolean;
   onSave: (settings: Record<string, string>) => Promise<void>;
+  defaultSystemPrompt?: string;
+  defaultSystemPromptWithoutBuiltInTools?: string;
 }
 
 interface CustomRow {
@@ -138,7 +140,13 @@ function getApproxEstimatedTokensLabel(tokens: number | null | undefined): strin
   return `~${tokens ?? 0} tokens`;
 }
 
-const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSave }) => {
+const SettingsPanel: React.FC<SettingsPanelProps> = ({
+  settings,
+  isSaving,
+  onSave,
+  defaultSystemPrompt = '',
+  defaultSystemPromptWithoutBuiltInTools = '',
+}) => {
   const [customRows, setCustomRows] = useState<CustomRow[]>(() => {
     const rows: CustomRow[] = [];
     for (const [key, value] of Object.entries(settings)) {
@@ -211,6 +219,21 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSav
       return getEstimatedTokensLabel(tokens);
     });
   }, [agentInstructionBlocks, instructionBlockEstimatedTokens]);
+
+  const builtInToolsBlock = useMemo(
+    () => agentInstructionBlocks.find((block) => block.type === BUILTIN_TOOLS_BLOCK_TYPE),
+    [agentInstructionBlocks],
+  );
+  const builtInToolsEnabled = builtInToolsBlock?.enabled !== false;
+  const builtInToolsBlockTokens = useMemo(() => {
+    const index = agentInstructionBlocks.findIndex((block) => block.type === BUILTIN_TOOLS_BLOCK_TYPE);
+    if (index < 0) {
+      return 0;
+    }
+    return instructionBlockEstimatedTokens[index] ?? 0;
+  }, [agentInstructionBlocks, instructionBlockEstimatedTokens]);
+  const activeBuiltInPrompt = builtInToolsEnabled ? defaultSystemPrompt : defaultSystemPromptWithoutBuiltInTools;
+  const alternateBuiltInPrompt = builtInToolsEnabled ? defaultSystemPromptWithoutBuiltInTools : defaultSystemPrompt;
 
   const enabledInstructionTotalTokens = useMemo(() => {
     if (!instructionEstimate) {
@@ -378,6 +401,26 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSav
             },
           }}
         />
+        {defaultSystemPrompt || defaultSystemPromptWithoutBuiltInTools ? (
+          <details className="builtin-system-prompt">
+            <summary>
+              Built-in tools prompt text ({builtInToolsBlockTokens} tokens, {builtInToolsEnabled ? 'enabled variant active' : 'disabled variant active'})
+            </summary>
+            <p className="settings-help">
+              This is the hard-coded base prompt variant. It is only used when <code>AAGENT_SYSTEM_PROMPT</code> is not set.
+            </p>
+            <div className="builtin-system-prompt-panels">
+              <div className="builtin-system-prompt-panel">
+                <h3>Active variant</h3>
+                <pre>{activeBuiltInPrompt}</pre>
+              </div>
+              <div className="builtin-system-prompt-panel">
+                <h3>Other variant</h3>
+                <pre>{alternateBuiltInPrompt}</pre>
+              </div>
+            </div>
+          </details>
+        ) : null}
       </div>
 
       <div className="settings-panel">
