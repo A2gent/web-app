@@ -2,6 +2,9 @@
 
 React + TypeScript frontend for the `aagent` HTTP API.
 
+<img width="1318" height="787" alt="Screenshot 2026-02-15 at 23 50 51" src="https://github.com/user-attachments/assets/eba3d49b-f1b3-4e53-be00-e2bb9411a27f" />
+
+
 ## Development
 
 ```bash
