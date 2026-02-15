@@ -5,17 +5,22 @@ import {
   getSettings,
   listBuiltInSkills,
   listIntegrationBackedSkills,
+  listPiperVoices,
   listSpeechVoices,
   type BuiltInSkill,
   type ElevenLabsVoice,
   type IntegrationBackedSkill,
   type MindTreeEntry,
+  type PiperVoiceOption,
   updateSettings,
 } from './api';
 import {
+  CAMERA_INDEX,
+  CAMERA_OUTPUT_DIR,
   ELEVENLABS_SPEED,
   ELEVENLABS_SPEED_OPTIONS,
   ELEVENLABS_VOICE_ID,
+  PIPER_MODEL,
   SCREENSHOT_DISPLAY_INDEX,
   SCREENSHOT_OUTPUT_DIR,
   speedToOptionIndex,
@@ -55,8 +60,14 @@ function ToolsView() {
 
   const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState('');
   const [elevenLabsSpeed, setElevenLabsSpeed] = useState('1.0');
+  const [piperModel, setPiperModel] = useState('en_US-lessac-medium');
   const [screenshotOutputDir, setScreenshotOutputDir] = useState('/tmp');
   const [screenshotDisplayIndex, setScreenshotDisplayIndex] = useState('');
+  const [cameraOutputDir, setCameraOutputDir] = useState('/tmp');
+  const [cameraIndex, setCameraIndex] = useState('');
+  const [piperVoices, setPiperVoices] = useState<PiperVoiceOption[]>([]);
+  const [isLoadingPiperVoices, setIsLoadingPiperVoices] = useState(false);
+  const [piperVoicesError, setPiperVoicesError] = useState<string | null>(null);
 
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
@@ -65,6 +76,7 @@ function ToolsView() {
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [hasAttemptedVoiceLoad, setHasAttemptedVoiceLoad] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<'screenshot' | 'camera'>('screenshot');
   const [browsePath, setBrowsePath] = useState('');
   const [browseEntries, setBrowseEntries] = useState<MindTreeEntry[]>([]);
   const [isLoadingBrowse, setIsLoadingBrowse] = useState(false);
@@ -72,6 +84,23 @@ function ToolsView() {
   const [builtInSkills, setBuiltInSkills] = useState<BuiltInSkill[]>([]);
   const [integrationSkills, setIntegrationSkills] = useState<IntegrationBackedSkill[]>([]);
   const hasElevenLabsSkill = integrationSkills.some((integration) => integration.provider === 'elevenlabs');
+  const hasPiperTool = builtInSkills.some((skill) => skill.name === 'piper_tts');
+  const piperVoiceOptions = (() => {
+    const map = new Map<string, PiperVoiceOption>();
+    for (const voice of piperVoices) {
+      map.set(voice.id, voice);
+    }
+    const current = piperModel.trim();
+    if (current !== '' && !map.has(current)) {
+      map.set(current, { id: current, installed: false });
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.installed !== b.installed) {
+        return a.installed ? -1 : 1;
+      }
+      return a.id.localeCompare(b.id);
+    });
+  })();
 
   const loadSettings = async () => {
     try {
@@ -81,13 +110,36 @@ function ToolsView() {
       setSettings(loaded);
       setElevenLabsVoiceId(loaded[ELEVENLABS_VOICE_ID] || '');
       setElevenLabsSpeed(loaded[ELEVENLABS_SPEED] || '1.0');
+      setPiperModel(loaded[PIPER_MODEL] || 'en_US-lessac-medium');
       setScreenshotOutputDir(loaded[SCREENSHOT_OUTPUT_DIR] || '/tmp');
       setScreenshotDisplayIndex(loaded[SCREENSHOT_DISPLAY_INDEX] || '');
+      setCameraOutputDir(loaded[CAMERA_OUTPUT_DIR] || '/tmp');
+      setCameraIndex(loaded[CAMERA_INDEX] || '');
     } catch (loadError) {
       console.error('Failed to load tools settings:', loadError);
       setError(loadError instanceof Error ? loadError.message : 'Failed to load tools settings');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadPiperVoices = async () => {
+    setPiperVoicesError(null);
+    setIsLoadingPiperVoices(true);
+    try {
+      const items = await listPiperVoices();
+      const next = items.slice().sort((a, b) => {
+        if (a.installed !== b.installed) {
+          return a.installed ? -1 : 1;
+        }
+        return a.id.localeCompare(b.id);
+      });
+      setPiperVoices(next);
+    } catch (loadError) {
+      setPiperVoices([]);
+      setPiperVoicesError(loadError instanceof Error ? loadError.message : 'Failed to load Piper voices');
+    } finally {
+      setIsLoadingPiperVoices(false);
     }
   };
 
@@ -153,6 +205,13 @@ function ToolsView() {
     };
   }, [hasElevenLabsSkill, voices.length, isLoadingVoices, hasAttemptedVoiceLoad]);
 
+  useEffect(() => {
+    if (!hasPiperTool || isLoadingPiperVoices || piperVoices.length > 0) {
+      return;
+    }
+    void loadPiperVoices();
+  }, [hasPiperTool, isLoadingPiperVoices, piperVoices.length]);
+
   const loadBrowse = async (path: string) => {
     setIsLoadingBrowse(true);
     setError(null);
@@ -167,9 +226,11 @@ function ToolsView() {
     }
   };
 
-  const openPicker = async () => {
+  const openPicker = async (target: 'screenshot' | 'camera') => {
+    setPickerTarget(target);
     setIsPickerOpen(true);
-    await loadBrowse(screenshotOutputDir || browsePath);
+    const targetPath = target === 'camera' ? cameraOutputDir : screenshotOutputDir;
+    await loadBrowse(targetPath || browsePath);
   };
 
   const handlePlayPreview = async (voice: ElevenLabsVoice | undefined) => {
@@ -216,6 +277,12 @@ function ToolsView() {
       payload[ELEVENLABS_VOICE_ID] = voiceId;
     }
     payload[ELEVENLABS_SPEED] = ELEVENLABS_SPEED_OPTIONS[speedToOptionIndex(elevenLabsSpeed)];
+    const trimmedPiperModel = piperModel.trim();
+    if (trimmedPiperModel === '') {
+      delete payload[PIPER_MODEL];
+    } else {
+      payload[PIPER_MODEL] = trimmedPiperModel;
+    }
     const screenshotDir = screenshotOutputDir.trim();
     if (screenshotDir === '') {
       delete payload[SCREENSHOT_OUTPUT_DIR];
@@ -231,6 +298,22 @@ function ToolsView() {
       return;
     } else {
       payload[SCREENSHOT_DISPLAY_INDEX] = displayIndex;
+    }
+    const camDir = cameraOutputDir.trim();
+    if (camDir === '') {
+      delete payload[CAMERA_OUTPUT_DIR];
+    } else {
+      payload[CAMERA_OUTPUT_DIR] = camDir;
+    }
+    const camIndex = cameraIndex.trim();
+    if (camIndex === '') {
+      delete payload[CAMERA_INDEX];
+    } else if (!/^[1-9]\d*$/.test(camIndex)) {
+      setError('Camera default index must be a positive integer.');
+      setIsSaving(false);
+      return;
+    } else {
+      payload[CAMERA_INDEX] = camIndex;
     }
 
     try {
@@ -301,7 +384,7 @@ function ToolsView() {
                                 placeholder="/tmp"
                                 autoComplete="off"
                               />
-                              <button type="button" className="settings-add-btn" onClick={() => void openPicker()}>
+                              <button type="button" className="settings-add-btn" onClick={() => void openPicker('screenshot')}>
                                 Browse
                               </button>
                             </div>
@@ -319,6 +402,86 @@ function ToolsView() {
                               1-based monitor index used by <code>take_screenshot_tool</code> when no explicit target/display is passed.
                             </div>
                           </label>
+                        </div>
+                      </details>
+                    ) : null}
+                    {skill.name === 'take_camera_photo_tool' ? (
+                      <details className="skill-tool-details">
+                        <summary>Configure defaults</summary>
+                        <p>Defaults used by this tool when no output path/camera index is passed.</p>
+                        <div className="settings-group">
+                          <label className="settings-field">
+                            <span>Default output directory</span>
+                            <div className="tool-folder-picker-row">
+                              <input
+                                type="text"
+                                value={cameraOutputDir}
+                                onChange={(event) => setCameraOutputDir(event.target.value)}
+                                placeholder="/tmp"
+                                autoComplete="off"
+                              />
+                              <button type="button" className="settings-add-btn" onClick={() => void openPicker('camera')}>
+                                Browse
+                              </button>
+                            </div>
+                          </label>
+                          <label className="settings-field">
+                            <span>Default camera index (optional)</span>
+                            <input
+                              type="text"
+                              value={cameraIndex}
+                              onChange={(event) => setCameraIndex(event.target.value)}
+                              placeholder="1"
+                              autoComplete="off"
+                            />
+                            <div className="settings-help">
+                              1-based camera index used by <code>take_camera_photo_tool</code> when no explicit camera is passed.
+                            </div>
+                          </label>
+                        </div>
+                      </details>
+                    ) : null}
+                    {skill.name === 'piper_tts' ? (
+                      <details className="skill-tool-details">
+                        <summary>Configure defaults</summary>
+                        <p>Defaults used by <code>piper_tts</code> when no model/voice is explicitly passed.</p>
+                        <div className="settings-group">
+                          <label className="settings-field">
+                            <span>Default Piper voice/model ID</span>
+                            <select
+                              value={piperModel}
+                              onChange={(event) => setPiperModel(event.target.value)}
+                              disabled={isLoadingPiperVoices && piperVoiceOptions.length === 0}
+                            >
+                              {piperVoiceOptions.length === 0 ? (
+                                <option value="en_US-lessac-medium">
+                                  {isLoadingPiperVoices ? 'Loading Piper voices...' : 'en_US-lessac-medium'}
+                                </option>
+                              ) : (
+                                piperVoiceOptions.map((voice) => (
+                                  <option key={voice.id} value={voice.id}>
+                                    {voice.id}{voice.installed ? ' (installed)' : ''}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                            <div className="settings-help">
+                              Saved as <code>PIPER_MODEL</code>. Pick a multilingual voice/model (for example <code>ru_RU-ruslan-medium</code> for Russian).
+                            </div>
+                          </label>
+                          <div className="settings-help">
+                            {isLoadingPiperVoices ? 'Loading Piper voices...' : `Loaded ${piperVoiceOptions.length} Piper voice options.`}
+                          </div>
+                          {piperVoices.some((voice) => voice.installed) ? (
+                            <div className="settings-help">
+                              Installed voices:{' '}
+                              {piperVoices
+                                .filter((voice) => voice.installed)
+                                .map((voice) => voice.id)
+                                .join(', ')}
+                            </div>
+                          ) : null}
+                          {piperVoicesError ? <div className="settings-error">{piperVoicesError}</div> : null}
                         </div>
                       </details>
                     ) : null}
@@ -455,9 +618,9 @@ function ToolsView() {
       </div>
 
       {isPickerOpen ? (
-        <div className="mind-picker-overlay" role="dialog" aria-modal="true" aria-label="Choose screenshot output folder">
+        <div className="mind-picker-overlay" role="dialog" aria-modal="true" aria-label="Choose tool output folder">
           <div className="mind-picker-dialog">
-            <h2>Choose screenshot output folder</h2>
+            <h2>Choose output folder</h2>
             <div className="mind-picker-path">{browsePath || 'Loading...'}</div>
             <div className="mind-picker-actions">
               <button
@@ -472,7 +635,11 @@ function ToolsView() {
                 type="button"
                 className="settings-save-btn"
                 onClick={() => {
-                  setScreenshotOutputDir(browsePath);
+                  if (pickerTarget === 'camera') {
+                    setCameraOutputDir(browsePath);
+                  } else {
+                    setScreenshotOutputDir(browsePath);
+                  }
                   setIsPickerOpen(false);
                 }}
                 disabled={isLoadingBrowse || browsePath.trim() === ''}

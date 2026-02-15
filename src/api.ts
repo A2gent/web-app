@@ -301,6 +301,12 @@ export interface ElevenLabsVoice {
   preview_url?: string;
 }
 
+export interface PiperVoiceOption {
+  id: string;
+  installed: boolean;
+  model_path?: string;
+}
+
 export type LLMProviderType = string;
 
 export interface FallbackChainNode {
@@ -958,6 +964,14 @@ export async function listSpeechVoices(): Promise<ElevenLabsVoice[]> {
   const response = await fetch(`${getApiBaseUrl()}/speech/voices`);
   if (!response.ok) {
     throw await buildApiError(response, 'Failed to load speech voices');
+  }
+  return response.json();
+}
+
+export async function listPiperVoices(): Promise<PiperVoiceOption[]> {
+  const response = await fetch(`${getApiBaseUrl()}/speech/piper/voices`);
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to load Piper voices');
   }
   return response.json();
 }

@@ -8,12 +8,14 @@ const TOOL_ICONS_BY_NAME: Record<string, string> = {
   find_files: '🔎',
   grep: '🔍',
   take_screenshot_tool: '📸',
+  take_camera_photo_tool: '📷',
   recurring_jobs_tool: '🕒',
   task: '🧠',
   google_calendar_query: '🗓️',
   brave_search_query: '🌐',
   elevenlabs_tts: '🎙️',
   macos_say_tts: '🔊',
+  piper_tts: '🔊',
   notify_webapp: '🔔',
   telegram_send_message: '✉️',
 };
@@ -25,4 +27,3 @@ export function toolIconForName(toolName: string): string {
   }
   return TOOL_ICONS_BY_NAME[normalized] || '🧰';
 }
-
