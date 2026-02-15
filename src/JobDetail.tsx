@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { deleteJob, getJob, getSettings, listJobSessions, runJobNow, type RecurringJob, type Session } from './api';
 import { THINKING_JOB_ID_SETTING_KEY } from './thinking';
+import { buildOpenInMyMindUrl } from './myMindNavigation';
 
 function JobDetail() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -107,6 +108,8 @@ function JobDetail() {
   }
 
   const isThinkingJob = job.id === thinkingJobID;
+  const instructionFilePath = (job.task_prompt_file || '').trim();
+  const canOpenInstructionFile = job.task_prompt_source === 'file' && instructionFilePath !== '';
 
   return (
     <div className="job-detail-container">
@@ -185,6 +188,18 @@ function JobDetail() {
 
         <div className="job-task-section">
           <h3>Task Instructions</h3>
+          {canOpenInstructionFile ? (
+            <div className="job-task-path-row">
+              <span className="info-label">Instruction file:</span>{' '}
+              <Link
+                to={buildOpenInMyMindUrl(instructionFilePath)}
+                className="tool-path-link"
+                title={`Open ${instructionFilePath} in My Mind`}
+              >
+                {instructionFilePath}
+              </Link>
+            </div>
+          ) : null}
           <pre className="task-prompt">{job.task_prompt}</pre>
         </div>
 

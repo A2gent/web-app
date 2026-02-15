@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   browseMindDirectories,
   createProject,
@@ -89,6 +89,36 @@ function resolveMarkdownLinkPath(currentFilePath: string, hrefPath: string): str
     return normalizeMindPath(hrefPath.slice(1));
   }
   return normalizeMindPath([dirname(currentFilePath), hrefPath].filter(Boolean).join('/'));
+}
+
+function normalizePathForCompare(value: string): string {
+  return value.replace(/[\\]+/g, '/').replace(/\/+$/, '');
+}
+
+function isAbsolutePath(path: string): boolean {
+  return path.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(path) || path.startsWith('\\\\');
+}
+
+function toMindRelativePath(rootFolder: string, path: string): string {
+  const trimmedPath = path.trim();
+  if (trimmedPath === '') {
+    return '';
+  }
+
+  if (!isAbsolutePath(trimmedPath)) {
+    return normalizeMindPath(trimmedPath);
+  }
+
+  const rootNormalized = normalizePathForCompare(rootFolder.trim());
+  const pathNormalized = normalizePathForCompare(trimmedPath);
+  if (rootNormalized === '' || pathNormalized.length <= rootNormalized.length) {
+    return '';
+  }
+  if (!pathNormalized.toLowerCase().startsWith(`${rootNormalized.toLowerCase()}/`)) {
+    return '';
+  }
+
+  return normalizeMindPath(pathNormalized.slice(rootNormalized.length + 1));
 }
 
 function escapeHtml(value: string): string {
@@ -307,6 +337,7 @@ function buildMindSessionContext(type: 'folder' | 'file', fullPath: string): str
 
 function MyMindView() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
   const [rootFolder, setRootFolder] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -343,6 +374,7 @@ function MyMindView() {
   const [treePanelWidth, setTreePanelWidth] = useState(readStoredTreePanelWidth);
   const treeResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const fileActionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const handledOpenFileQueryRef = useRef('');
 
   const loadTree = useCallback(async (path: string) => {
     setLoadingDirs((prev) => new Set(prev).add(path));
@@ -552,7 +584,7 @@ function MyMindView() {
     }
   };
 
-  const openFile = async (path: string) => {
+  const openFile = useCallback(async (path: string) => {
     setSelectedFilePath(path);
     setIsLoadingFile(true);
     setError(null);
@@ -568,7 +600,32 @@ function MyMindView() {
     } finally {
       setIsLoadingFile(false);
     }
-  };
+  }, []);
+
+  const expandTreePath = useCallback(async (relativePath: string) => {
+    const parentPath = dirname(relativePath);
+    const parentParts = parentPath.split('/').filter(Boolean);
+    const pathsToLoad: string[] = [''];
+    let current = '';
+    for (const part of parentParts) {
+      current = current ? `${current}/${part}` : part;
+      pathsToLoad.push(current);
+    }
+
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      for (const path of pathsToLoad) {
+        if (path !== '') {
+          next.add(path);
+        }
+      }
+      return next;
+    });
+
+    for (const path of pathsToLoad) {
+      await loadTree(path);
+    }
+  }, [loadTree]);
 
   const saveCurrentFile = async () => {
     if (selectedFilePath.trim() === '') {
@@ -813,6 +870,35 @@ function MyMindView() {
     setIsFileActionsMenuOpen(false);
     navigate(`/agent/jobs/new?prefillInstructionFile=${encodeURIComponent(selectedFileAbsolutePath)}`);
   };
+
+  useEffect(() => {
+    const requestedOpenPath = (searchParams.get('openFile') || '').trim();
+    if (requestedOpenPath === '' || rootFolder.trim() === '') {
+      return;
+    }
+    if (handledOpenFileQueryRef.current === requestedOpenPath) {
+      return;
+    }
+
+    const relativePath = toMindRelativePath(rootFolder, requestedOpenPath);
+    handledOpenFileQueryRef.current = requestedOpenPath;
+
+    if (relativePath === '') {
+      setError('Requested file is outside of My Mind root folder.');
+      return;
+    }
+
+    const openFromQuery = async () => {
+      await expandTreePath(relativePath);
+      await openFile(relativePath);
+
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('openFile');
+      setSearchParams(nextParams, { replace: true });
+    };
+
+    void openFromQuery();
+  }, [expandTreePath, openFile, rootFolder, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!pendingAnchor || isLoadingFile || markdownMode !== 'preview') {

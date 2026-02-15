@@ -43,6 +43,7 @@ function ProviderEditView() {
   const [modelsError, setModelsError] = useState<string | null>(null);
 
   const [fallbackChain, setFallbackChain] = useState<FallbackChainNode[]>([]);
+  const [fallbackName, setFallbackName] = useState('');
   const [candidateNode, setCandidateNode] = useState<LLMProviderType>('openai');
   const [candidateNodeModel, setCandidateNodeModel] = useState('');
   const [candidateNodeModels, setCandidateNodeModels] = useState<string[]>([]);
@@ -133,6 +134,7 @@ function ProviderEditView() {
     if (isFallbackProvider(selected.type)) {
       const initialChain = (selected.fallback_chain || []).filter((node) => node.provider !== 'fallback_chain');
       setFallbackChain(initialChain);
+      setFallbackName(selected.display_name || '');
       const firstCandidate = nonAggregateProviders.find((provider) => provider.configured)?.type || nonAggregateProviders[0]?.type || 'openai';
       setCandidateNode(firstCandidate);
       const provider = nonAggregateProviders.find((item) => item.type === firstCandidate);
@@ -306,7 +308,7 @@ function ProviderEditView() {
 
       const payload = isFallback
         ? {
-            name: isNamedFallbackAggregate ? selected?.display_name : undefined,
+            name: isNamedFallbackAggregate ? fallbackName.trim() : undefined,
             fallback_chain: fallbackChain,
           }
         : isAutomaticRouter
@@ -632,6 +634,18 @@ function ProviderEditView() {
 
           {isFallback ? (
             <div className="settings-field">
+              {isNamedFallbackAggregate ? (
+                <label className="settings-field">
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    value={fallbackName}
+                    onChange={(event) => setFallbackName(event.target.value)}
+                    placeholder="Fallback chain name"
+                    disabled={isSaving}
+                  />
+                </label>
+              ) : null}
               <span>Fallback nodes (in order)</span>
               <div className="provider-fallback-compose-row">
                 <select value={candidateNode} onChange={(e) => {
@@ -728,6 +742,7 @@ function ProviderEditView() {
               onClick={handleSave}
               disabled={
                 isSaving ||
+                (isNamedFallbackAggregate && fallbackName.trim() === '') ||
                 (isFallback && fallbackChain.length < 2) ||
                 (isAutomaticRouter && (routerProvider.trim() === '' || routingRules.length === 0 || (!isFallbackProvider(routerProvider) && routerModel.trim() === '')))
               }

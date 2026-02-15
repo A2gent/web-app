@@ -1,4 +1,6 @@
 import type { InstructionBlock, InstructionBlockType } from './instructionBlocks';
+import { useNavigate } from 'react-router-dom';
+import { buildOpenInMyMindUrl } from './myMindNavigation';
 
 interface InstructionBlocksEditorProps {
   blocks: InstructionBlock[];
@@ -11,6 +13,7 @@ interface InstructionBlocksEditorProps {
   addTextLabel?: string;
   addFileLabel?: string;
   emptyStateText?: string;
+  showOpenInMyMind?: boolean;
 }
 
 function InstructionBlocksEditor({
@@ -24,7 +27,10 @@ function InstructionBlocksEditor({
   addTextLabel = 'Add text block',
   addFileLabel = 'Add file block',
   emptyStateText = 'No instruction blocks yet.',
+  showOpenInMyMind = false,
 }: InstructionBlocksEditorProps) {
+  const navigate = useNavigate();
+
   const addBlock = (type: InstructionBlockType) => {
     onChange([...blocks, { type, value: '', enabled: true }]);
   };
@@ -141,14 +147,27 @@ function InstructionBlocksEditor({
                 aria-label="Instruction text"
               />
             ) : block.type === 'file' ? (
-              <input
-                type="text"
-                value={block.value}
-                onChange={(event) => updateBlock(index, { value: event.target.value })}
-                placeholder={filePlaceholder}
-                disabled={disabled}
-                aria-label="Instruction file path"
-              />
+              <div className="instruction-block-file-row">
+                <input
+                  type="text"
+                  value={block.value}
+                  onChange={(event) => updateBlock(index, { value: event.target.value })}
+                  placeholder={filePlaceholder}
+                  disabled={disabled}
+                  aria-label="Instruction file path"
+                />
+                {showOpenInMyMind ? (
+                  <button
+                    type="button"
+                    className="settings-add-btn"
+                    onClick={() => navigate(buildOpenInMyMindUrl(block.value))}
+                    disabled={disabled || block.value.trim() === ''}
+                    title="Open this file in My Mind"
+                  >
+                    Open in My Mind
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <p className="settings-help">
                 Loads `AGENTS.md` (or `agents.md`) from active project folder(s) at runtime. In Settings estimates, it defaults to your My Mind root folder.

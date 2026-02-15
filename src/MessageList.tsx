@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { fetchSpeechClip, type Message, type ToolCall, type ToolResult } from './api';
 import { IntegrationProviderIcon, integrationProviderForToolName, integrationProviderLabel } from './integrationMeta';
 import { renderMarkdownToHtml } from './markdown';
+import { buildOpenInMyMindUrl, extractToolFilePath, isSupportedFileTool } from './myMindNavigation';
 
 interface MessageListProps {
   messages: Message[];
@@ -94,6 +96,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
 
   const renderToolExecutionCard = (toolCall: ToolCall, result: ToolResult | undefined, timestamp: string, key: string) => {
     const provider = integrationProviderForToolName(toolCall.name);
+    const filePath = isSupportedFileTool(toolCall.name) ? extractToolFilePath(toolCall.input) : null;
     return (
       <details key={key} className={`message message-tool tool-execution-card tool-card-collapsed${result?.is_error ? ' tool-execution-card-error' : ''}`}>
         <summary className="tool-card-summary">
@@ -106,6 +109,24 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
               </span>
             ) : null}
             <span className="tool-name">{toolCall.name}</span>
+            {filePath ? (
+              <>
+                <span className="tool-inline-separator">·</span>
+                <Link
+                  to={buildOpenInMyMindUrl(filePath)}
+                  className="tool-path-link"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                  }}
+                  onMouseDown={(event) => {
+                    event.stopPropagation();
+                  }}
+                  title={`Open ${filePath} in My Mind`}
+                >
+                  {filePath}
+                </Link>
+              </>
+            ) : null}
           </span>
           <span className="message-time">{new Date(timestamp).toLocaleTimeString()}</span>
         </summary>

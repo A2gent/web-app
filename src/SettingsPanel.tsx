@@ -409,6 +409,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSav
           textPlaceholder="Global instructions that should always apply..."
           filePlaceholder="notes/agent-rules.md"
           emptyStateText="No global instruction blocks configured."
+          showOpenInMyMind
         />
       </div>
 
