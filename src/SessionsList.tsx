@@ -73,6 +73,7 @@ function SessionsList({ onSelectSession }: SessionsListProps) {
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState('');
   const [projectFolderDraft, setProjectFolderDraft] = useState<string[]>([]);
+  const [deletingProjectSessionsID, setDeletingProjectSessionsID] = useState<string | null>(null);
   const [browsePath, setBrowsePath] = useState('');
   const [browseEntries, setBrowseEntries] = useState<MindTreeEntry[]>([]);
   const [isLoadingBrowse, setIsLoadingBrowse] = useState(false);
@@ -437,6 +438,11 @@ function SessionsList({ onSelectSession }: SessionsListProps) {
     return normalized.charAt(0).toUpperCase() + normalized.slice(1);
   };
 
+  const isSessionInProgress = (status: string) => {
+    const normalized = status.trim().toLowerCase();
+    return normalized === 'running' || normalized === 'in_progress';
+  };
+
   const formatTokenCount = (tokens: number) => {
     return `${new Intl.NumberFormat('en-US', {
       notation: 'compact',
@@ -620,9 +626,39 @@ function SessionsList({ onSelectSession }: SessionsListProps) {
               {sortedProjects.map((project) => {
                 const sectionKey = `project:${project.id}`;
                 const sectionSessions = sessionsByProject[project.id] ?? [];
+                const deletableSessions = sectionSessions.filter((session) => !isSessionInProgress(session.status));
                 const count = sectionSessions.length;
                 const isCollapsed = isSectionCollapsed(sectionKey);
                 const showEmptyDropzone = Boolean(draggingSessionID && count === 0 && !isCollapsed);
+                const isDeletingProjectSessions = deletingProjectSessionsID === project.id;
+                const handleDeleteProjectSessions = async () => {
+                  if (deletableSessions.length === 0) {
+                    setError(`No deletable sessions in ${project.name}.`);
+                    return;
+                  }
+
+                  if (!confirm(`Delete ${deletableSessions.length} non-in-progress session${deletableSessions.length === 1 ? '' : 's'} in ${project.name}?`)) {
+                    return;
+                  }
+
+                  setDeletingProjectSessionsID(project.id);
+                  setError(null);
+                  try {
+                    const results = await Promise.allSettled(
+                      deletableSessions.map((session) => deleteSession(session.id)),
+                    );
+                    const failedCount = results.filter((result) => result.status === 'rejected').length;
+                    if (failedCount > 0) {
+                      setError(`Deleted ${deletableSessions.length - failedCount} session(s); ${failedCount} failed.`);
+                    }
+                    await loadSessions();
+                  } catch (err) {
+                    console.error('Failed to delete project sessions:', err);
+                    setError(err instanceof Error ? err.message : 'Failed to delete project sessions');
+                  } finally {
+                    setDeletingProjectSessionsID((current) => (current === project.id ? null : current));
+                  }
+                };
                 return (
                   <section
                     key={project.id}
@@ -644,6 +680,15 @@ function SessionsList({ onSelectSession }: SessionsListProps) {
                       </button>
                       <h2 className="sessions-group-title">{project.name}</h2>
                       <span className="sessions-group-count">{count} session{count === 1 ? '' : 's'}</span>
+                      <button
+                        className="project-bulk-delete-btn"
+                        onClick={() => void handleDeleteProjectSessions()}
+                        title={`Delete non-in-progress sessions in ${project.name}`}
+                        aria-label={`Delete non-in-progress sessions in ${project.name}`}
+                        disabled={isDeletingProjectSessions || deletableSessions.length === 0}
+                      >
+                        {isDeletingProjectSessions ? 'Deleting...' : 'Delete sessions'}
+                      </button>
                       <button
                         className="project-folders-btn"
                         onClick={() => void openProjectFolderPicker(project)}

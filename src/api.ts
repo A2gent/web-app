@@ -307,6 +307,10 @@ export interface PiperVoiceOption {
   model_path?: string;
 }
 
+export interface SpeechTranscriptionResponse {
+  text: string;
+}
+
 export interface CameraDeviceInfo {
   index: number;
   name: string;
@@ -1015,6 +1019,23 @@ export async function fetchSpeechClip(clipID: string): Promise<Blob> {
     throw await buildApiError(response, 'Failed to load generated speech clip');
   }
   return response.blob();
+}
+
+export async function transcribeSpeech(audio: Blob, language?: string): Promise<SpeechTranscriptionResponse> {
+  const formData = new FormData();
+  formData.append('audio', audio, 'recording.wav');
+  if ((language || '').trim() !== '') {
+    formData.append('language', (language || '').trim());
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/speech/transcribe`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to transcribe speech');
+  }
+  return response.json();
 }
 
 // --- Provider API ---

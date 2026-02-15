@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   createJob,
   getJob,
@@ -288,6 +288,12 @@ function ThinkingView() {
 
           <div className="thinking-field">
             <span>Thinking instruction blocks</span>
+            <div className="thinking-global-instructions">
+              <div className="thinking-global-instructions-title">Global agent instructions are always applied first.</div>
+              <div className="thinking-global-instructions-body">
+                Configure global instructions in <Link to="/settings">Settings</Link>.
+              </div>
+            </div>
             <InstructionBlocksEditor
               blocks={instructionBlocks}
               onChange={setInstructionBlocks}

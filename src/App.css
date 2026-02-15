@@ -297,6 +297,42 @@ body.mind-resizing * {
   color: #ff4444;
 }
 
+.voice-live-panel {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid #3c2c2c;
+  border-radius: 8px;
+  background: #221b1b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ff7d7d;
+  font-size: 13px;
+}
+
+.voice-waveform {
+  width: min(100%, 780px);
+  height: 108px;
+  border: 1px solid #3f3f3f;
+  border-radius: 6px;
+  background: #232323;
+}
+
+.voice-meter-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.voice-level-text {
+  font-size: 12px;
+  color: #ffa0a0;
+  min-width: 40px;
+  text-align: right;
+}
+
 .recording-dot {
   width: 8px;
   height: 8px;
@@ -1714,6 +1750,27 @@ body.mind-resizing * {
 .project-folders-btn:hover {
   border-color: #6d6d6d;
   color: #efefef;
+}
+
+.project-bulk-delete-btn {
+  border: 1px solid rgba(244, 67, 54, 0.45);
+  background: rgba(244, 67, 54, 0.1);
+  color: #ffb4af;
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.project-bulk-delete-btn:hover:not(:disabled) {
+  border-color: rgba(244, 67, 54, 0.8);
+  background: rgba(244, 67, 54, 0.16);
+  color: #ffd6d3;
+}
+
+.project-bulk-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .project-folder-draft-list {
@@ -4885,6 +4942,30 @@ input[type="checkbox"]:disabled {
   margin: 0;
   color: #a8a8a8;
   font-size: 13px;
+}
+
+.thinking-global-instructions {
+  border: 1px solid #3f4f75;
+  border-radius: 8px;
+  background: #1d2331;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+}
+
+.thinking-global-instructions-title {
+  color: #e6ecff;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.thinking-global-instructions-body {
+  color: #bdc8e7;
+  font-size: 13px;
+}
+
+.thinking-global-instructions a {
+  color: #8fa6ff;
 }
 
 .thinking-actions {
