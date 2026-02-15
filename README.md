@@ -1,6 +1,7 @@
-# A2gent Web App
+# A² Brute web application
 
-React + TypeScript frontend for the A2gent AI Agent HTTP API. A modern, responsive web interface for managing AI agent sessions, jobs, tools, and knowledge base.
+React + TypeScript frontend for the [A² Brute terminal agent](https://github.com/A2gent/aagent). 
+A modern, responsive web interface for managing AI agent sessions, jobs, tools, and knowledge base.
 
 <img width="1318" height="787" alt="A2gent Web App Screenshot" src="https://github.com/user-attachments/assets/eba3d49b-f1b3-4e53-be00-e2bb9411a27f" />
 
