@@ -346,13 +346,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSav
           Compose reusable instruction blocks for the agent system prompt. Thinking runs inherit these and can add extra blocks.
         </p>
         <div className="settings-actions">
-          <Link to="/skills" className="settings-add-btn">
-            Open Skills
+          <Link to="/tools" className="settings-add-btn">
+            Open Tools
           </Link>
         </div>
         <div className="instruction-block instruction-block-singleline">
           <div className="instruction-block-singleline-main">
-            <Link to="/skills" className="instruction-block-link">Built-in tools</Link>
+            <Link to="/tools" className="instruction-block-link">Built-in tools</Link>
             <span className="instruction-block-token-count">{getEstimatedTokensLabel(builtInToolsEnabled ? builtInToolsEstimatedTokens : 0)}</span>
           </div>
           <label className="instruction-block-enabled-toggle" title="Enable built-in tools guidance in system prompt">
@@ -368,7 +368,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, isSaving, onSav
         </div>
         <div className="instruction-block instruction-block-singleline">
           <div className="instruction-block-singleline-main">
-            <Link to="/skills" className="instruction-block-link">Integration-backed skills</Link>
+            <Link to="/tools" className="instruction-block-link">Integration-backed skills</Link>
             <span className="instruction-block-token-count">{getEstimatedTokensLabel(integrationSkillsEnabled ? integrationSkillsEstimatedTokens : 0)}</span>
           </div>
           <label className="instruction-block-enabled-toggle" title="Enable integration skills context in system prompt">

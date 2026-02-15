@@ -21,6 +21,7 @@ interface ProviderSpec {
   provider: IntegrationProvider;
   label: string;
   description: string;
+  flow: 'input' | 'output' | 'bidirectional';
   modes: IntegrationMode[];
   fields: Array<{
     key: string;
@@ -38,6 +39,7 @@ const PROVIDERS: ProviderSpec[] = [
     provider: 'telegram',
     label: 'Telegram',
     description: 'Chat with your agent from Telegram.',
+    flow: 'bidirectional',
     modes: ['notify_only', 'duplex'],
     fields: [
       { key: 'bot_token', label: 'Bot token', placeholder: '123456:abc...', secret: true },
@@ -62,6 +64,7 @@ const PROVIDERS: ProviderSpec[] = [
     provider: 'slack',
     label: 'Slack',
     description: 'Route updates and replies to a Slack channel.',
+    flow: 'bidirectional',
     modes: ['notify_only', 'duplex'],
     fields: [
       { key: 'bot_token', label: 'Bot token', placeholder: 'xoxb-...', secret: true },
@@ -72,6 +75,7 @@ const PROVIDERS: ProviderSpec[] = [
     provider: 'discord',
     label: 'Discord',
     description: 'Use Discord channels for agent notifications and chats.',
+    flow: 'bidirectional',
     modes: ['notify_only', 'duplex'],
     fields: [
       { key: 'bot_token', label: 'Bot token', placeholder: 'discord token', secret: true },
@@ -82,6 +86,7 @@ const PROVIDERS: ProviderSpec[] = [
     provider: 'whatsapp',
     label: 'WhatsApp',
     description: 'Connect WhatsApp for direct agent conversations.',
+    flow: 'bidirectional',
     modes: ['notify_only', 'duplex'],
     fields: [
       { key: 'access_token', label: 'Access token', placeholder: 'Meta Graph API token', secret: true },
@@ -93,6 +98,7 @@ const PROVIDERS: ProviderSpec[] = [
     provider: 'webhook',
     label: 'Webhook',
     description: 'Send agent updates to your own endpoint.',
+    flow: 'output',
     modes: ['notify_only'],
     fields: [
       { key: 'url', label: 'Webhook URL', placeholder: 'https://example.com/agent-events' },
@@ -103,6 +109,7 @@ const PROVIDERS: ProviderSpec[] = [
     provider: 'elevenlabs',
     label: 'ElevenLabs',
     description: 'Store ElevenLabs API key so agent tools can synthesize speech clips.',
+    flow: 'output',
     modes: ['notify_only'],
     fields: [
       { key: 'api_key', label: 'API key', placeholder: 'sk_...', secret: true },
@@ -111,8 +118,9 @@ const PROVIDERS: ProviderSpec[] = [
   {
     provider: 'google_calendar',
     label: 'Google Calendar',
-    description: 'Let the agent query your calendars and events via OAuth tokens.',
-    modes: ['duplex'],
+    description: 'Read calendars and events via OAuth tokens.',
+    flow: 'input',
+    modes: ['notify_only'],
     fields: [
       { key: 'client_id', label: 'OAuth client ID', placeholder: '1234567890-abc.apps.googleusercontent.com' },
       { key: 'client_secret', label: 'OAuth client secret', placeholder: 'GOCSPX-...', secret: true },
@@ -127,6 +135,7 @@ const PROVIDERS: ProviderSpec[] = [
     provider: 'perplexity',
     label: 'Perplexity',
     description: 'Store Perplexity API credentials for future web research and answer generation workflows.',
+    flow: 'input',
     modes: ['notify_only'],
     fields: [
       { key: 'api_key', label: 'API key', placeholder: 'pplx-...', secret: true },
@@ -137,6 +146,7 @@ const PROVIDERS: ProviderSpec[] = [
     provider: 'brave_search',
     label: 'Brave Search',
     description: 'Store Brave Search credentials so agent tools can run web search.',
+    flow: 'input',
     modes: ['notify_only'],
     fields: [
       { key: 'api_key', label: 'API key', placeholder: 'BSA...', secret: true },
@@ -165,7 +175,38 @@ function providerById(provider: IntegrationProvider): ProviderSpec {
 }
 
 function modeLabel(mode: IntegrationMode): string {
-  return mode === 'duplex' ? 'Duplex chat' : 'One-way / API';
+  return mode === 'duplex' ? 'Input + output' : 'One-way';
+}
+
+function integrationDirectionLabel(integration: Integration): string {
+  const flow = providerById(integration.provider).flow;
+  if (flow === 'input') {
+    return 'Input only';
+  }
+  if (flow === 'output') {
+    return 'Output only';
+  }
+  return modeLabel(integration.mode);
+}
+
+function flowLabel(flow: ProviderSpec['flow']): string {
+  if (flow === 'input') {
+    return 'Input integrations';
+  }
+  if (flow === 'output') {
+    return 'Output integrations';
+  }
+  return 'Input + output integrations';
+}
+
+function flowDescription(flow: ProviderSpec['flow']): string {
+  if (flow === 'input') {
+    return 'Read-only data sources the agent can query.';
+  }
+  if (flow === 'output') {
+    return 'Destinations where the agent sends updates or generated content.';
+  }
+  return 'Channels where users can message the agent and receive replies.';
 }
 
 function defaultConfigForProvider(provider: IntegrationProvider): Record<string, string> {
@@ -178,6 +219,7 @@ function defaultConfigForProvider(provider: IntegrationProvider): Record<string,
 }
 
 const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isSaving, onCreate, onUpdate, onDelete, onTest }) => {
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [provider, setProvider] = useState<IntegrationProvider>('telegram');
   const [name, setName] = useState('');
@@ -197,6 +239,22 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
     return counts;
   }, [integrations]);
 
+  const providersByFlow = useMemo(() => {
+    return {
+      input: PROVIDERS.filter((item) => item.flow === 'input'),
+      output: PROVIDERS.filter((item) => item.flow === 'output'),
+      bidirectional: PROVIDERS.filter((item) => item.flow === 'bidirectional'),
+    };
+  }, []);
+
+  const connectedByFlow = useMemo(() => {
+    return {
+      input: integrations.filter((item) => providerById(item.provider).flow === 'input'),
+      output: integrations.filter((item) => providerById(item.provider).flow === 'output'),
+      bidirectional: integrations.filter((item) => providerById(item.provider).flow === 'bidirectional'),
+    };
+  }, [integrations]);
+
   const setProviderWithDefaults = (next: IntegrationProvider) => {
     const nextSpec = providerById(next);
     setProvider(next);
@@ -213,6 +271,16 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
     setConfig(defaultConfigForProvider('telegram'));
     setError(null);
     setSuccess(null);
+  };
+
+  const openCreateComposer = () => {
+    resetForm();
+    setIsComposerOpen(true);
+  };
+
+  const closeComposer = () => {
+    resetForm();
+    setIsComposerOpen(false);
   };
 
   const validateForm = (): string | null => {
@@ -249,12 +317,10 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
     try {
       if (editingId) {
         await onUpdate(editingId, payload);
-        setSuccess('Integration updated.');
       } else {
         await onCreate(payload);
-        setSuccess('Integration connected.');
       }
-      resetForm();
+      closeComposer();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Failed to save integration');
     }
@@ -264,6 +330,7 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
     const editSpec = providerById(integration.provider);
     const nextMode = editSpec.modes.includes(integration.mode) ? integration.mode : editSpec.modes[0];
     setEditingId(integration.id);
+    setIsComposerOpen(true);
     setProvider(integration.provider);
     setName(integration.name);
     setMode(nextMode);
@@ -282,7 +349,7 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
     try {
       await onDelete(integration.id);
       if (editingId === integration.id) {
-        resetForm();
+        closeComposer();
       }
       setSuccess('Integration removed.');
     } catch (deleteError) {
@@ -307,169 +374,204 @@ const IntegrationsPanel: React.FC<IntegrationsPanelProps> = ({ integrations, isS
 
   return (
     <div className="integrations-panel">
-      <p className="settings-help">
-        Connect chat channels, webhooks, and data sources like Google Calendar, then enable or remove them anytime.
-      </p>
-      <p className="settings-help">
-        For agent-triggered speech, add an enabled ElevenLabs integration, then set default voice and speed in Skills.
-      </p>
-
-      <div className="integration-provider-grid">
-        {PROVIDERS.map((item) => (
-          <button
-            key={item.provider}
-            type="button"
-            className={`integration-provider-card ${item.provider === provider ? 'active' : ''}`}
-            onClick={() => setProviderWithDefaults(item.provider)}
-          >
-            <div className="integration-provider-card-header">
-              <span className="integration-provider-label">
-                <IntegrationProviderIcon provider={item.provider} label={item.label} />
-                <span>{item.label}</span>
-              </span>
-              <span className="integration-count-badge">{connectedByProvider.get(item.provider) || 0} connected</span>
-            </div>
-            <p>{item.description}</p>
-          </button>
-        ))}
-      </div>
-
-      <form className="integration-form" onSubmit={handleSubmit}>
-        <div className="integration-form-title-row">
-          <h3>{editingId ? 'Edit integration' : 'Connect new integration'}</h3>
-          {editingId && (
-            <button type="button" className="settings-remove-btn" onClick={resetForm}>
-              Cancel edit
+      {!isComposerOpen ? (
+        <div className="integrations-list">
+          <div className="integration-list-header-row">
+            <h3>Connected integrations</h3>
+            <button type="button" className="settings-add-btn" onClick={openCreateComposer}>
+              Add new integration
             </button>
+          </div>
+          <p className="settings-help">
+            Manage your connected integrations. Add a new one when you need another channel or data source.
+          </p>
+          {error && <div className="settings-error">{error}</div>}
+          {success && <div className="settings-success">{success}</div>}
+          {integrations.length === 0 ? (
+            <p className="settings-help">No integrations connected yet.</p>
+          ) : (
+            (['input', 'output', 'bidirectional'] as const).map((flow) => (
+              <div key={flow} className="integration-connected-section">
+                <h4>{flowLabel(flow)}</h4>
+                {connectedByFlow[flow].length === 0 ? (
+                  <p className="settings-help">No connected integrations in this group.</p>
+                ) : (
+                  connectedByFlow[flow].map((integration) => (
+                    <div className="integration-row" key={integration.id}>
+                      <div className="integration-row-main">
+                        <div className="integration-row-title">
+                          <strong>{integration.name}</strong>
+                          <span className={`integration-status ${integration.enabled ? 'enabled' : 'disabled'}`}>
+                            {integration.enabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </div>
+                        <div className="integration-row-meta">
+                          <span className="integration-provider-label">
+                            <IntegrationProviderIcon provider={integration.provider} label={providerById(integration.provider).label} />
+                            <span>{providerById(integration.provider).label}</span>
+                          </span>
+                          <span>{integrationDirectionLabel(integration)}</span>
+                          <span>Updated {new Date(integration.updated_at).toLocaleString()}</span>
+                        </div>
+                      </div>
+
+                      <div className="integration-row-actions">
+                        <button type="button" className="settings-add-btn" onClick={() => handleTest(integration)}>
+                          Test
+                        </button>
+                        <button type="button" className="settings-add-btn" onClick={() => handleEdit(integration)}>
+                          Edit
+                        </button>
+                        <button type="button" className="settings-remove-btn" onClick={() => handleDelete(integration)}>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ))
           )}
         </div>
+      ) : (
+        <div className="integration-composer">
+          <div className="integration-composer-header-row">
+            <h3>{editingId ? 'Edit integration' : 'Connect new integration'}</h3>
+            <button type="button" className="settings-add-btn" onClick={closeComposer}>
+              Back to connected integrations
+            </button>
+          </div>
+          <p className="settings-help">
+            Choose an integration type, then fill in the credentials and options.
+          </p>
+          <p className="settings-help">
+            For agent-triggered speech, add an enabled ElevenLabs integration, then set default voice and speed in Tools.
+          </p>
 
-        <div className="settings-group">
-          <label className="settings-field">
-            <span>Integration name</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={`${spec.label} primary`}
-              autoComplete="off"
-            />
-          </label>
-
-          {spec.modes.length > 1 && (
-            <label className="settings-field">
-              <span>Mode</span>
-              <select value={mode} onChange={(e) => handleModeChange(e.target.value as IntegrationMode)}>
-                {spec.modes.map((modeOption) => (
-                  <option key={modeOption} value={modeOption}>
-                    {modeLabel(modeOption)}
-                  </option>
+          {(['input', 'output', 'bidirectional'] as const).map((flow) => (
+            <div key={flow} className="integration-provider-section">
+              <h3>{flowLabel(flow)}</h3>
+              <p className="settings-help">{flowDescription(flow)}</p>
+              <div className="integration-provider-grid">
+                {providersByFlow[flow].map((item) => (
+                  <button
+                    key={item.provider}
+                    type="button"
+                    className={`integration-provider-card ${item.provider === provider ? 'active' : ''}`}
+                    onClick={() => setProviderWithDefaults(item.provider)}
+                  >
+                    <div className="integration-provider-card-header">
+                      <span className="integration-provider-label">
+                        <IntegrationProviderIcon provider={item.provider} label={item.label} />
+                        <span>{item.label}</span>
+                      </span>
+                      <span className="integration-count-badge">{connectedByProvider.get(item.provider) || 0} connected</span>
+                    </div>
+                    <p>{item.description}</p>
+                  </button>
                 ))}
-              </select>
-            </label>
-          )}
+              </div>
+            </div>
+          ))}
 
-          <label className="settings-field integration-toggle">
-            <span>Enabled</span>
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-            />
-          </label>
-        </div>
+          <form className="integration-form" onSubmit={handleSubmit}>
+            <div className="integration-form-title-row">
+              <h3>{editingId ? `Editing: ${name || spec.label}` : `Configure: ${spec.label}`}</h3>
+              {editingId && (
+                <button type="button" className="settings-remove-btn" onClick={openCreateComposer}>
+                  Switch to new integration
+                </button>
+              )}
+            </div>
 
-        <div className="settings-group">
-          {spec.fields.map((field) => (
-            <label className="settings-field" key={field.key}>
-              <span>{field.label}</span>
-              {field.kind === 'select' ? (
-                <select
-                  value={config[field.key] || field.options?.[0]?.value || ''}
-                  onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                >
-                  {(field.options || []).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
+            <div className="settings-group">
+              <label className="settings-field">
+                <span>Integration name</span>
                 <input
-                  type={field.secret ? 'password' : 'text'}
-                  value={config[field.key] || ''}
-                  onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                  placeholder={field.placeholder}
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={`${spec.label} primary`}
                   autoComplete="off"
                 />
+              </label>
+
+              {spec.modes.length > 1 && (
+                <label className="settings-field">
+                  <span>Mode</span>
+                  <select value={mode} onChange={(e) => handleModeChange(e.target.value as IntegrationMode)}>
+                    {spec.modes.map((modeOption) => (
+                      <option key={modeOption} value={modeOption}>
+                        {modeLabel(modeOption)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               )}
-              {provider === 'telegram' && field.key === 'bot_token' && (
-                <div className="integration-helper-block">
-                  <p className="settings-help integration-helper-text">
-                    First create a Telegram bot with @BotFather (send /newbot), then copy the bot token BotFather gives you and paste it here.
-                  </p>
-                  <p className="settings-help integration-helper-text">
-                    In @BotFather, enable group usage with /setjoingroups and disable privacy mode with /setprivacy. This integration listens to all groups/topics the bot is in.
-                  </p>
-                  <p className="settings-help integration-helper-text">
-                    New Telegram sessions are assigned to the My Mind project. For thread-to-session mapping, add the bot to your group, create topics, and keep Session mapping set to topic.
-                  </p>
-                  <p className="settings-help integration-helper-text">
-                    Set Default chat ID to mirror newly created Web App sessions into Telegram automatically. If topic creation fails, the message is posted in the main chat.
-                  </p>
-                </div>
-              )}
-            </label>
-          ))}
-        </div>
 
-        {error && <div className="settings-error">{error}</div>}
-        {success && <div className="settings-success">{success}</div>}
-
-        <button type="submit" className="settings-save-btn" disabled={isSaving}>
-          {isSaving ? 'Saving...' : editingId ? 'Save integration' : 'Connect integration'}
-        </button>
-      </form>
-
-      <div className="integrations-list">
-        <h3>Connected integrations</h3>
-        {integrations.length === 0 ? (
-          <p className="settings-help">No integrations connected yet.</p>
-        ) : (
-          integrations.map((integration) => (
-            <div className="integration-row" key={integration.id}>
-              <div className="integration-row-main">
-                <div className="integration-row-title">
-                  <strong>{integration.name}</strong>
-                  <span className={`integration-status ${integration.enabled ? 'enabled' : 'disabled'}`}>
-                    {integration.enabled ? 'Enabled' : 'Disabled'}
-                  </span>
-                </div>
-                <div className="integration-row-meta">
-                  <span className="integration-provider-label">
-                    <IntegrationProviderIcon provider={integration.provider} label={providerById(integration.provider).label} />
-                    <span>{providerById(integration.provider).label}</span>
-                  </span>
-                  <span>{modeLabel(integration.mode)}</span>
-                  <span>Updated {new Date(integration.updated_at).toLocaleString()}</span>
-                </div>
-              </div>
-
-              <div className="integration-row-actions">
-                <button type="button" className="settings-add-btn" onClick={() => handleTest(integration)}>
-                  Test
-                </button>
-                <button type="button" className="settings-add-btn" onClick={() => handleEdit(integration)}>
-                  Edit
-                </button>
-                <button type="button" className="settings-remove-btn" onClick={() => handleDelete(integration)}>
-                  Remove
-                </button>
-              </div>
+              <label className="settings-field integration-toggle">
+                <span>Enabled</span>
+                <input
+                  type="checkbox"
+                  checked={enabled}
+                  onChange={(e) => setEnabled(e.target.checked)}
+                />
+              </label>
             </div>
-          ))
-        )}
-      </div>
+
+            <div className="settings-group">
+              {spec.fields.map((field) => (
+                <label className="settings-field" key={field.key}>
+                  <span>{field.label}</span>
+                  {field.kind === 'select' ? (
+                    <select
+                      value={config[field.key] || field.options?.[0]?.value || ''}
+                      onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                    >
+                      {(field.options || []).map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.secret ? 'password' : 'text'}
+                      value={config[field.key] || ''}
+                      onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                      placeholder={field.placeholder}
+                      autoComplete="off"
+                    />
+                  )}
+                  {provider === 'telegram' && field.key === 'bot_token' && (
+                    <div className="integration-helper-block">
+                      <p className="settings-help integration-helper-text">
+                        First create a Telegram bot with @BotFather (send /newbot), then copy the bot token BotFather gives you and paste it here.
+                      </p>
+                      <p className="settings-help integration-helper-text">
+                        In @BotFather, enable group usage with /setjoingroups and disable privacy mode with /setprivacy. This integration listens to all groups/topics the bot is in.
+                      </p>
+                      <p className="settings-help integration-helper-text">
+                        New Telegram sessions are assigned to the My Mind project. For thread-to-session mapping, add the bot to your group, create topics, and keep Session mapping set to topic.
+                      </p>
+                      <p className="settings-help integration-helper-text">
+                        Set Default chat ID to mirror newly created Web App sessions into Telegram automatically. If topic creation fails, the message is posted in the main chat.
+                      </p>
+                    </div>
+                  )}
+                </label>
+              ))}
+            </div>
+
+            {error && <div className="settings-error">{error}</div>}
+            {success && <div className="settings-success">{success}</div>}
+
+            <button type="submit" className="settings-save-btn" disabled={isSaving}>
+              {isSaving ? 'Saving...' : editingId ? 'Save integration' : 'Connect integration'}
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

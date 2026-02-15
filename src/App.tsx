@@ -8,6 +8,7 @@ import JobEdit from './JobEdit';
 import JobDetail from './JobDetail';
 import ChatView from './ChatView';
 import IntegrationsView from './IntegrationsView';
+import MCPServersView from './MCPServersView';
 import ProviderEditView from './ProviderEditView';
 import ProvidersView from './ProvidersView';
 import FallbackAggregateCreateView from './FallbackAggregateCreateView';
@@ -15,6 +16,7 @@ import SettingsView from './SettingsView';
 import MyMindView from './MyMindView';
 import ThinkingView from './ThinkingView';
 import SkillsView from './SkillsView';
+import ToolsView from './ToolsView';
 import { getAppTitle, listSessions, setAppTitle as persistAppTitle } from './api';
 import { THINKING_PROJECT_ID } from './thinking';
 import './App.css';
@@ -367,11 +369,13 @@ function AppLayout() {
           <Route path="/agent/jobs/edit/:jobId" element={<JobEdit />} />
           <Route path="/agent/jobs/:jobId" element={<JobDetail />} />
           <Route path="/integrations" element={<IntegrationsView />} />
+          <Route path="/mcp" element={<MCPServersView />} />
           <Route path="/my-mind" element={<MyMindView />} />
           <Route path="/thinking" element={<ThinkingView />} />
           <Route path="/providers" element={<ProvidersView />} />
           <Route path="/providers/fallback-aggregates/new" element={<FallbackAggregateCreateView />} />
           <Route path="/providers/:providerType" element={<ProviderEditView />} />
+          <Route path="/tools" element={<ToolsView />} />
           <Route path="/skills" element={<SkillsView />} />
           <Route path="/settings" element={<SettingsView />} />
         </Routes>

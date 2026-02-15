@@ -18,9 +18,11 @@ const navItems: NavItem[] = [
   { id: 'my-mind', label: '🧠 My Mind', path: '/my-mind' },
   { id: 'thinking', label: '🤔 Thinking', path: '/thinking' },
   { id: 'jobs', label: '🗓️ Recurring jobs', path: '/agent/jobs' },
-  { id: 'skills', label: '🧰 Skills', path: '/skills' },
+  { id: 'tools', label: '🧰 Tools', path: '/tools' },
+  { id: 'skills', label: '📚 Skills', path: '/skills' },
   { id: 'settings', label: '⚙️ Settings', path: '/settings' },
   { id: 'integrations', label: '🔌 Integrations', path: '/integrations' },
+  { id: 'mcp', label: '🧩 MCP', path: '/mcp' },
   { id: 'providers', label: '🤖 LLM providers', path: '/providers' },
 ];
 

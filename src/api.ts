@@ -392,6 +392,64 @@ export interface IntegrationTestResponse {
   message: string;
 }
 
+export type MCPTransport = 'stdio' | 'http';
+
+export interface MCPServer {
+  id: string;
+  name: string;
+  transport: MCPTransport;
+  enabled: boolean;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  url?: string;
+  headers?: Record<string, string>;
+  timeout_seconds: number;
+  last_test_at?: string;
+  last_test_success?: boolean;
+  last_test_message?: string;
+  last_estimated_tokens?: number;
+  last_tool_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MCPServerRequest {
+  name: string;
+  transport: MCPTransport;
+  enabled: boolean;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  url?: string;
+  headers?: Record<string, string>;
+  timeout_seconds: number;
+}
+
+export interface MCPTool {
+  name: string;
+  description?: string;
+  input_schema?: Record<string, unknown>;
+  raw?: Record<string, unknown>;
+}
+
+export interface MCPServerTestResponse {
+  success: boolean;
+  message: string;
+  transport: MCPTransport;
+  duration_ms: number;
+  server_info?: Record<string, unknown>;
+  capabilities?: Record<string, unknown>;
+  tools: MCPTool[];
+  tool_count: number;
+  estimated_tokens: number;
+  estimated_metadata_tokens: number;
+  estimated_tools_tokens: number;
+  logs: string[];
+}
+
 export interface TelegramChatCandidate {
   chat_id: string;
   type: string;
@@ -1109,6 +1167,63 @@ export async function discoverTelegramChats(botToken: string): Promise<TelegramC
   });
   if (!response.ok) {
     throw await buildApiError(response, 'Failed to discover Telegram chat IDs');
+  }
+  return response.json();
+}
+
+// --- MCP Servers API ---
+
+export async function listMCPServers(): Promise<MCPServer[]> {
+  const response = await fetch(`${getApiBaseUrl()}/mcp/servers`);
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to list MCP servers');
+  }
+  return response.json();
+}
+
+export async function createMCPServer(payload: MCPServerRequest): Promise<MCPServer> {
+  const response = await fetch(`${getApiBaseUrl()}/mcp/servers`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to create MCP server');
+  }
+  return response.json();
+}
+
+export async function updateMCPServer(serverId: string, payload: MCPServerRequest): Promise<MCPServer> {
+  const response = await fetch(`${getApiBaseUrl()}/mcp/servers/${serverId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to update MCP server');
+  }
+  return response.json();
+}
+
+export async function deleteMCPServer(serverId: string): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/mcp/servers/${serverId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to delete MCP server');
+  }
+}
+
+export async function testMCPServer(serverId: string): Promise<MCPServerTestResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/mcp/servers/${serverId}/test`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to test MCP server');
   }
   return response.json();
 }
