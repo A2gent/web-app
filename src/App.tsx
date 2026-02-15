@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import SessionsList from './SessionsList';
 import JobsList from './JobsList';
@@ -69,6 +69,14 @@ function isTerminalSessionStatus(status: string): boolean {
   return normalized === 'completed' || normalized === 'failed';
 }
 
+function activeChatSessionIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/chat\/([^/]+)$/);
+  if (!match || !match[1]) {
+    return null;
+  }
+  return decodeURIComponent(match[1]);
+}
+
 // Wrapper component to use navigate hook
 function SessionsListWrapper() {
   const navigate = useNavigate();
@@ -88,6 +96,7 @@ function SessionsListWrapper() {
 
 function AppLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= MOBILE_BREAKPOINT);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(readStoredOpenState);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -100,6 +109,8 @@ function AppLayout() {
   const [notificationAudioStates, setNotificationAudioStates] = useState<Record<string, NotificationAudioState>>({});
   const notificationAudioMapRef = useRef<Map<string, { audio: HTMLAudioElement; objectUrl: string }>>(new Map());
   const [appTitle, setAppTitle] = useState(() => getAppTitle());
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const [newestNotificationID, setNewestNotificationID] = useState<string | null>(null);
 
   const isSidebarOpen = isMobile ? isMobileSidebarOpen : isDesktopSidebarOpen;
 
@@ -127,6 +138,23 @@ function AppLayout() {
       ...prev,
       [id]: next,
     }));
+  }, []);
+
+  const pushNotification = useCallback((notification: CompletionNotification) => {
+    let inserted = false;
+    setNotifications((prev) => {
+      if (prev.some((item) => item.id === notification.id)) {
+        return prev;
+      }
+      inserted = true;
+      return [notification, ...prev].slice(0, 6);
+    });
+
+    if (!inserted) {
+      return;
+    }
+    setNewestNotificationID(notification.id);
+    setIsNotificationPanelOpen(true);
   }, []);
 
   const stopOtherNotificationAudio = useCallback((exceptID: string) => {
@@ -316,23 +344,19 @@ function AppLayout() {
           if (!isNewTerminalSession && !isTransitionToTerminal) {
             continue;
           }
+          const activeChatSessionId = activeChatSessionIdFromPath(location.pathname);
+          const isViewingCompletedSession = session.status === 'completed' && activeChatSessionId === session.id;
+          if (isViewingCompletedSession) {
+            continue;
+          }
 
           const notificationId = `${session.id}:${session.updated_at}`;
-          setNotifications((prev) => {
-            if (prev.some((item) => item.id === notificationId)) {
-              return prev;
-            }
-            const next = [
-              {
-                id: notificationId,
-                sessionId: session.id,
-                title: session.title?.trim() || `Session ${session.id.slice(0, 8)}`,
-                status: session.status,
-                createdAt: session.updated_at,
-              },
-              ...prev,
-            ];
-            return next.slice(0, 6);
+          pushNotification({
+            id: notificationId,
+            sessionId: session.id,
+            title: session.title?.trim() || `Session ${session.id.slice(0, 8)}`,
+            status: session.status,
+            createdAt: session.updated_at,
           });
         }
 
@@ -406,7 +430,7 @@ function AppLayout() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [location.pathname, pushNotification]);
 
   useEffect(() => {
     const onWebAppNotification = (event: Event) => {
@@ -418,24 +442,15 @@ function AppLayout() {
         return;
       }
       seenWebAppNotificationIDsRef.current.add(detail.id);
-      setNotifications((prev) => {
-        if (prev.some((item) => item.id === detail.id)) {
-          return prev;
-        }
-        const next = [
-          {
-            id: detail.id,
-            sessionId: detail.sessionId,
-            title: detail.title,
-            status: detail.level,
-            createdAt: detail.createdAt,
-            message: detail.message,
-            imageUrl: detail.imageUrl,
-            audioClipId: detail.audioClipId,
-          },
-          ...prev,
-        ];
-        return next.slice(0, 6);
+      pushNotification({
+        id: detail.id,
+        sessionId: detail.sessionId,
+        title: detail.title,
+        status: detail.level,
+        createdAt: detail.createdAt,
+        message: detail.message,
+        imageUrl: detail.imageUrl,
+        audioClipId: detail.audioClipId,
       });
 
       if (detail.audioClipId && detail.autoPlayAudio !== false) {
@@ -447,7 +462,19 @@ function AppLayout() {
     return () => {
       window.removeEventListener(webAppNotificationEventName, onWebAppNotification as EventListener);
     };
-  }, [playNotificationAudio]);
+  }, [playNotificationAudio, pushNotification]);
+
+  useEffect(() => {
+    if (!newestNotificationID) {
+      return;
+    }
+    const timeoutID = window.setTimeout(() => {
+      setNewestNotificationID((current) => (current === newestNotificationID ? null : current));
+    }, 1200);
+    return () => {
+      window.clearTimeout(timeoutID);
+    };
+  }, [newestNotificationID]);
 
   useEffect(() => {
     const activeIDs = new Set(notifications.map((item) => item.id));
@@ -509,7 +536,7 @@ function AppLayout() {
 
   return (
     <div
-      className={`app-container ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'} ${isMobile ? 'mobile-layout' : 'desktop-layout'}`}
+      className={`app-container ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'} ${isMobile ? 'mobile-layout' : 'desktop-layout'} ${isNotificationPanelOpen ? 'notifications-panel-open' : 'notifications-panel-collapsed'}`}
       style={
         {
           '--sidebar-width': `${sidebarWidth}px`,
@@ -562,84 +589,108 @@ function AppLayout() {
         </div>
       ) : null}
 
-      {notifications.length > 0 && (
-        <div className="completion-notification-stack" aria-live="polite" aria-atomic="false">
-          {notifications.map((notification) => (
-            <div key={notification.id} className="completion-notification-card">
-              {(() => {
-                const audioState = notificationAudioStates[notification.id] || 'idle';
-                const hasAudio = typeof notification.audioClipId === 'string' && notification.audioClipId.trim() !== '';
-                return (
-                  <>
-              <div className="completion-notification-title-row">
-                <strong>{notification.title}</strong>
-                <span className={`completion-notification-status status-${notification.status}`}>
-                  {notification.status}
-                </span>
-              </div>
-              <div className="completion-notification-meta">
-                {new Date(notification.createdAt).toLocaleTimeString()}
-              </div>
-              {notification.message ? <div className="completion-notification-meta">{notification.message}</div> : null}
-              {notification.imageUrl ? (
-                <img className="completion-notification-image" src={notification.imageUrl} alt="Notification" loading="lazy" />
-              ) : null}
-              {hasAudio ? (
-                <div className="completion-notification-meta">Audio: {audioState}</div>
-              ) : null}
-              <div className="completion-notification-actions">
-                {notification.sessionId ? (
-                  <button type="button" className="settings-add-btn" onClick={() => openNotificationSession(notification.sessionId)}>
-                    Open
-                  </button>
-                ) : null}
-                {hasAudio ? (
-                  <button
-                    type="button"
-                    className="settings-add-btn"
-                    onClick={() => void playNotificationAudio(notification.id, notification.audioClipId || '')}
-                    disabled={audioState === 'loading' || audioState === 'playing'}
-                    aria-label={audioState === 'paused' ? 'Resume audio' : 'Play audio'}
-                    title={audioState === 'paused' ? 'Resume audio' : 'Play audio'}
-                  >
-                    {audioState === 'loading' ? '...' : '▶'}
-                  </button>
-                ) : null}
-                {hasAudio ? (
-                  <button
-                    type="button"
-                    className="settings-add-btn"
-                    onClick={() => pauseNotificationAudio(notification.id)}
-                    disabled={audioState !== 'playing'}
-                    aria-label="Pause audio"
-                    title="Pause audio"
-                  >
-                    ⏸
-                  </button>
-                ) : null}
-                {hasAudio ? (
-                  <button
-                    type="button"
-                    className="settings-add-btn"
-                    onClick={() => stopNotificationAudio(notification.id)}
-                    disabled={audioState !== 'playing' && audioState !== 'paused'}
-                    aria-label="Stop audio"
-                    title="Stop audio"
-                  >
-                    ■
-                  </button>
-                ) : null}
-                <button type="button" className="settings-remove-btn" onClick={() => removeNotification(notification.id)}>
-                  Dismiss
-                </button>
-              </div>
-                  </>
-                );
-              })()}
-            </div>
-          ))}
+      <div className={`notification-panel ${isNotificationPanelOpen ? 'is-open' : 'is-collapsed'}`}>
+        <div className="notification-panel-handle">
+          <button
+            type="button"
+            className="sidebar-toggle notification-panel-toggle-btn"
+            onClick={() => setIsNotificationPanelOpen((isOpen) => !isOpen)}
+            aria-label={isNotificationPanelOpen ? 'Collapse notifications panel' : 'Expand notifications panel'}
+            title={isNotificationPanelOpen ? 'Collapse notifications panel' : 'Expand notifications panel'}
+          >
+            {isNotificationPanelOpen ? '▶' : '◀'}
+          </button>
         </div>
-      )}
+        <section className="notification-panel-content" aria-live="polite" aria-atomic="false">
+          <header className="notification-panel-header">
+            <strong>Notifications</strong>
+            <span className="notification-panel-count">{notifications.length}</span>
+          </header>
+          <div className="notification-panel-list">
+            {notifications.length === 0 ? (
+              <div className="notification-panel-empty">No notifications yet.</div>
+            ) : (
+              notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`completion-notification-card ${notification.id === newestNotificationID ? 'is-new' : ''}`}
+                >
+                  {(() => {
+                    const audioState = notificationAudioStates[notification.id] || 'idle';
+                    const hasAudio = typeof notification.audioClipId === 'string' && notification.audioClipId.trim() !== '';
+                    return (
+                      <>
+                        <div className="completion-notification-title-row">
+                          <strong>{notification.title}</strong>
+                          <span className={`completion-notification-status status-${notification.status}`}>
+                            {notification.status}
+                          </span>
+                        </div>
+                        <div className="completion-notification-meta">
+                          {new Date(notification.createdAt).toLocaleTimeString()}
+                        </div>
+                        {notification.message ? <div className="completion-notification-meta">{notification.message}</div> : null}
+                        {notification.imageUrl ? (
+                          <img className="completion-notification-image" src={notification.imageUrl} alt="Notification" loading="lazy" />
+                        ) : null}
+                        {hasAudio ? (
+                          <div className="completion-notification-meta">Audio: {audioState}</div>
+                        ) : null}
+                        <div className="completion-notification-actions">
+                          {notification.sessionId ? (
+                            <button type="button" className="settings-add-btn" onClick={() => openNotificationSession(notification.sessionId)}>
+                              Open
+                            </button>
+                          ) : null}
+                          {hasAudio ? (
+                            <button
+                              type="button"
+                              className="settings-add-btn"
+                              onClick={() => void playNotificationAudio(notification.id, notification.audioClipId || '')}
+                              disabled={audioState === 'loading' || audioState === 'playing'}
+                              aria-label={audioState === 'paused' ? 'Resume audio' : 'Play audio'}
+                              title={audioState === 'paused' ? 'Resume audio' : 'Play audio'}
+                            >
+                              {audioState === 'loading' ? '...' : '▶'}
+                            </button>
+                          ) : null}
+                          {hasAudio ? (
+                            <button
+                              type="button"
+                              className="settings-add-btn"
+                              onClick={() => pauseNotificationAudio(notification.id)}
+                              disabled={audioState !== 'playing'}
+                              aria-label="Pause audio"
+                              title="Pause audio"
+                            >
+                              ⏸
+                            </button>
+                          ) : null}
+                          {hasAudio ? (
+                            <button
+                              type="button"
+                              className="settings-add-btn"
+                              onClick={() => stopNotificationAudio(notification.id)}
+                              disabled={audioState !== 'playing' && audioState !== 'paused'}
+                              aria-label="Stop audio"
+                              title="Stop audio"
+                            >
+                              ■
+                            </button>
+                          ) : null}
+                          <button type="button" className="settings-remove-btn" onClick={() => removeNotification(notification.id)}>
+                            Dismiss
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
 
       <div className="main-content">
         <Routes>

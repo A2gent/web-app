@@ -286,45 +286,44 @@ function ToolsView() {
                       <span className="skill-badge">{skill.kind === 'tool' ? 'Tool' : 'Built-in'}</span>
                     </div>
                     <p>{skill.description}</p>
+                    {skill.name === 'take_screenshot_tool' ? (
+                      <details className="skill-tool-details">
+                        <summary>Configure defaults</summary>
+                        <p>Defaults used by this tool when no output path/display is passed.</p>
+                        <div className="settings-group">
+                          <label className="settings-field">
+                            <span>Default output directory</span>
+                            <div className="tool-folder-picker-row">
+                              <input
+                                type="text"
+                                value={screenshotOutputDir}
+                                onChange={(event) => setScreenshotOutputDir(event.target.value)}
+                                placeholder="/tmp"
+                                autoComplete="off"
+                              />
+                              <button type="button" className="settings-add-btn" onClick={() => void openPicker()}>
+                                Browse
+                              </button>
+                            </div>
+                          </label>
+                          <label className="settings-field">
+                            <span>Default display index (optional)</span>
+                            <input
+                              type="text"
+                              value={screenshotDisplayIndex}
+                              onChange={(event) => setScreenshotDisplayIndex(event.target.value)}
+                              placeholder="1"
+                              autoComplete="off"
+                            />
+                            <div className="settings-help">
+                              1-based monitor index used by <code>take_screenshot_tool</code> when no explicit target/display is passed.
+                            </div>
+                          </label>
+                        </div>
+                      </details>
+                    ) : null}
                   </div>
                 ))}
-              </div>
-            </div>
-
-            <div className="settings-panel">
-              <h2>Screenshot defaults</h2>
-              <p className="settings-help">
-                Configure defaults used by <code>take_screenshot_tool</code> when no output path is provided.
-              </p>
-              <div className="settings-group">
-                <label className="settings-field">
-                  <span>Default output directory</span>
-                  <div className="tool-folder-picker-row">
-                    <input
-                      type="text"
-                      value={screenshotOutputDir}
-                      onChange={(event) => setScreenshotOutputDir(event.target.value)}
-                      placeholder="/tmp"
-                      autoComplete="off"
-                    />
-                    <button type="button" className="settings-add-btn" onClick={() => void openPicker()}>
-                      Browse
-                    </button>
-                  </div>
-                </label>
-                <label className="settings-field">
-                  <span>Default display index (optional)</span>
-                  <input
-                    type="text"
-                    value={screenshotDisplayIndex}
-                    onChange={(event) => setScreenshotDisplayIndex(event.target.value)}
-                    placeholder="1"
-                    autoComplete="off"
-                  />
-                  <div className="settings-help">
-                    1-based monitor index used by <code>take_screenshot_tool</code> when no explicit target/display is passed.
-                  </div>
-                </label>
               </div>
             </div>
 
@@ -374,67 +373,71 @@ function ToolsView() {
                         </div>
                       )}
                       {integration.provider === 'elevenlabs' ? (
-                        <div className="settings-group skill-card-elevenlabs-defaults">
-                          <label className="settings-field">
-                            <span>Voice</span>
-                            <div className="elevenlabs-voice-row">
-                              <select
-                                value={elevenLabsVoiceId}
-                                onChange={(event) => setElevenLabsVoiceId(event.target.value)}
-                              >
-                                {voices.length === 0 ? (
-                                  <option value="">
-                                    {isLoadingVoices ? 'Loading voices...' : 'API key required in Integrations'}
-                                  </option>
-                                ) : (
-                                  voices.map((voice) => (
-                                    <option key={voice.voice_id} value={voice.voice_id}>
-                                      {voice.name}
+                        <details className="skill-tool-details">
+                          <summary>Configure defaults</summary>
+                          <p>Defaults used by <code>elevenlabs_tts</code> when voice/speed are not explicitly passed.</p>
+                          <div className="settings-group skill-card-elevenlabs-defaults">
+                            <label className="settings-field">
+                              <span>Voice</span>
+                              <div className="elevenlabs-voice-row">
+                                <select
+                                  value={elevenLabsVoiceId}
+                                  onChange={(event) => setElevenLabsVoiceId(event.target.value)}
+                                >
+                                  {voices.length === 0 ? (
+                                    <option value="">
+                                      {isLoadingVoices ? 'Loading voices...' : 'API key required in Integrations'}
                                     </option>
-                                  ))
-                                )}
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => handlePlayPreview(voices.find((voice) => voice.voice_id === elevenLabsVoiceId))}
-                                className="elevenlabs-preview-btn"
-                                disabled={!elevenLabsVoiceId || voices.length === 0}
-                                title="Play selected voice preview"
-                                aria-label="Play selected voice preview"
-                              >
-                                {playingVoiceId === elevenLabsVoiceId ? '...' : '▶'}
-                              </button>
-                            </div>
-                            <div className="settings-help">Default voice used by <code>elevenlabs_tts</code>.</div>
-                          </label>
+                                  ) : (
+                                    voices.map((voice) => (
+                                      <option key={voice.voice_id} value={voice.voice_id}>
+                                        {voice.name}
+                                      </option>
+                                    ))
+                                  )}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePlayPreview(voices.find((voice) => voice.voice_id === elevenLabsVoiceId))}
+                                  className="elevenlabs-preview-btn"
+                                  disabled={!elevenLabsVoiceId || voices.length === 0}
+                                  title="Play selected voice preview"
+                                  aria-label="Play selected voice preview"
+                                >
+                                  {playingVoiceId === elevenLabsVoiceId ? '...' : '▶'}
+                                </button>
+                              </div>
+                              <div className="settings-help">Default voice used by <code>elevenlabs_tts</code>.</div>
+                            </label>
 
-                          <label className="settings-field">
-                            <span>Voice speed</span>
-                            <div className="elevenlabs-speed-control">
-                              <input
-                                className="elevenlabs-speed-slider"
-                                type="range"
-                                min="0"
-                                max={String(ELEVENLABS_SPEED_OPTIONS.length - 1)}
-                                step="1"
-                                value={String(speedToOptionIndex(elevenLabsSpeed))}
-                                onChange={(event) => {
-                                  const nextIndex = Number.parseInt(event.target.value, 10);
-                                  setElevenLabsSpeed(ELEVENLABS_SPEED_OPTIONS[nextIndex] || ELEVENLABS_SPEED_OPTIONS[0]);
-                                }}
-                              />
-                              <div className="settings-help">Selected: {ELEVENLABS_SPEED_OPTIONS[speedToOptionIndex(elevenLabsSpeed)]}x</div>
-                            </div>
-                          </label>
+                            <label className="settings-field">
+                              <span>Voice speed</span>
+                              <div className="elevenlabs-speed-control">
+                                <input
+                                  className="elevenlabs-speed-slider"
+                                  type="range"
+                                  min="0"
+                                  max={String(ELEVENLABS_SPEED_OPTIONS.length - 1)}
+                                  step="1"
+                                  value={String(speedToOptionIndex(elevenLabsSpeed))}
+                                  onChange={(event) => {
+                                    const nextIndex = Number.parseInt(event.target.value, 10);
+                                    setElevenLabsSpeed(ELEVENLABS_SPEED_OPTIONS[nextIndex] || ELEVENLABS_SPEED_OPTIONS[0]);
+                                  }}
+                                />
+                                <div className="settings-help">Selected: {ELEVENLABS_SPEED_OPTIONS[speedToOptionIndex(elevenLabsSpeed)]}x</div>
+                              </div>
+                            </label>
 
-                          {!isLoadingVoices && voices.length === 0 ? (
-                            <p className="settings-help">
-                              Add an enabled ElevenLabs integration in <Link to="/integrations">Integrations</Link> to load voices.
-                            </p>
-                          ) : null}
+                            {!isLoadingVoices && voices.length === 0 ? (
+                              <p className="settings-help">
+                                Add an enabled ElevenLabs integration in <Link to="/integrations">Integrations</Link> to load voices.
+                              </p>
+                            ) : null}
 
-                          {voicesError ? <div className="settings-error">{voicesError}</div> : null}
-                        </div>
+                            {voicesError ? <div className="settings-error">{voicesError}</div> : null}
+                          </div>
+                        </details>
                       ) : null}
                     </div>
                   ))}
