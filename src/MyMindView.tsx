@@ -378,7 +378,6 @@ function MyMindView() {
   const [selectedProvider, setSelectedProvider] = useState<LLMProviderType | ''>('');
 
   const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(false);
-  const [sessionUserPrompt, setSessionUserPrompt] = useState('');
   const [isSessionContextExpanded, setIsSessionContextExpanded] = useState(false);
   const [sessionContextMessage, setSessionContextMessage] = useState('');
   const [sessionTargetLabel, setSessionTargetLabel] = useState('');
@@ -760,7 +759,6 @@ function MyMindView() {
 
     const fullPath = joinMindAbsolutePath(rootFolder, relativePath);
     setSessionTargetLabel(`${type === 'folder' ? 'Folder' : 'File'}: ${fullPath}`);
-    setSessionUserPrompt('');
     setIsSessionContextExpanded(false);
     setSessionContextMessage(buildMindSessionContext(type, fullPath));
     setInlineSession(null);
@@ -771,7 +769,6 @@ function MyMindView() {
 
   const closeSessionDialog = () => {
     setIsSessionPanelOpen(false);
-    setSessionUserPrompt('');
     setIsSessionContextExpanded(false);
     setSessionTargetLabel('');
     setSessionContextMessage('');
@@ -905,8 +902,8 @@ function MyMindView() {
     }
   };
 
-  const handleCreateMindSession = async () => {
-    const userPrompt = sessionUserPrompt.trim();
+  const handleCreateMindSession = async (userMessage: string) => {
+    const userPrompt = userMessage.trim();
     if (userPrompt === '') {
       setError('Describe what you want to do with this file/folder.');
       return;
@@ -1436,11 +1433,11 @@ function MyMindView() {
                 {!isLoadingBrowse && browseEntries.length === 0 ? <div className="sessions-empty">No folders found.</div> : null}
                 {!isLoadingBrowse
                   ? browseEntries.map((entry) => (
-                      <button key={entry.path} type="button" className="mind-picker-item" onClick={() => void loadBrowse(entry.path)}>
-                        <span className="mind-tree-icon" aria-hidden="true">📁</span>
-                        <span>{entry.name}</span>
-                      </button>
-                    ))
+                    <button key={entry.path} type="button" className="mind-picker-item" onClick={() => void loadBrowse(entry.path)}>
+                      <span className="mind-tree-icon" aria-hidden="true">📁</span>
+                      <span>{entry.name}</span>
+                    </button>
+                  ))
                   : null}
               </div>
             </div>
@@ -1499,28 +1496,18 @@ function MyMindView() {
                 />
               </div>
             ) : (
-              <>
-                <textarea
-                  id="mind-session-user-prompt"
-                  className="mind-session-textarea"
-                  value={sessionUserPrompt}
-                  onChange={(event) => setSessionUserPrompt(event.target.value)}
-                  disabled={isCreatingSession || isInlineSessionLoading}
-                  placeholder={sessionTargetLabel
-                    ? `Describe the task for ${sessionTargetLabel.toLowerCase()}...`
-                    : 'Describe the task...'}
-                />
+              <div className="mind-session-creation-form">
                 {isSessionContextExpanded ? (
                   <textarea
                     id="mind-session-context"
-                    className="mind-session-textarea"
+                    className="mind-session-textarea context-textarea"
                     value={sessionContextMessage}
                     onChange={(event) => setSessionContextMessage(event.target.value)}
                     disabled={isCreatingSession || isInlineSessionLoading}
                     placeholder="Generated context"
                   />
                 ) : null}
-                <div className="mind-session-controls">
+                <div className="mind-session-controls-row">
                   <button
                     type="button"
                     className="mind-session-context-toggle"
@@ -1529,36 +1516,40 @@ function MyMindView() {
                   >
                     {isSessionContextExpanded ? 'Hide generated context' : 'Show generated context'}
                   </button>
-                  {providers.length > 0 ? (
-                    <label className="chat-provider-select">
-                      <select
-                        value={selectedProvider}
-                        onChange={(event) => setSelectedProvider(event.target.value as LLMProviderType)}
-                        title="Provider"
-                        aria-label="Provider"
-                        disabled={isCreatingSession || isInlineSessionLoading}
-                      >
-                        {providers.map((provider) => (
-                          <option key={provider.type} value={provider.type}>
-                            {provider.display_name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="settings-save-btn"
-                    onClick={() => void handleCreateMindSession()}
-                    disabled={isCreatingSession || isInlineSessionLoading}
-                  >
-                    {isCreatingSession || isInlineSessionLoading ? 'Creating...' : 'Create session'}
-                  </button>
                   <button type="button" className="settings-remove-btn" onClick={closeSessionDialog} disabled={isCreatingSession}>
                     Close
                   </button>
                 </div>
-              </>
+                <ChatInput
+                  onSend={(message) => void handleCreateMindSession(message)}
+                  disabled={isCreatingSession || isInlineSessionLoading}
+                  autoFocus
+                  placeholder={sessionTargetLabel
+                    ? `Describe the task for ${sessionTargetLabel.toLowerCase()}...`
+                    : 'Describe the task...'}
+                  actionControls={(
+                    <div className="sessions-new-chat-controls">
+                      {providers.length > 0 ? (
+                        <label className="chat-provider-select">
+                          <select
+                            value={selectedProvider}
+                            onChange={(event) => setSelectedProvider(event.target.value as LLMProviderType)}
+                            title="Provider"
+                            aria-label="Provider"
+                            disabled={isCreatingSession || isInlineSessionLoading}
+                          >
+                            {providers.map((provider) => (
+                              <option key={provider.type} value={provider.type}>
+                                {provider.display_name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                  )}
+                />
+              </div>
             )}
           </div>
         ) : null}

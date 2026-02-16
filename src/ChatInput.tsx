@@ -9,6 +9,7 @@ interface ChatInputProps {
   actionControls?: React.ReactNode;
   showStopButton?: boolean;
   canStop?: boolean;
+  placeholder?: string;
 }
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
@@ -151,6 +152,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   actionControls,
   showStopButton = false,
   canStop = true,
+  placeholder,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const waveformCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -228,7 +230,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         return;
       }
       const lastTs = lastWaveformDrawTimeRef.current;
-      if (lastTs > 0 && timestamp-lastTs < 32) {
+      if (lastTs > 0 && timestamp - lastTs < 32) {
         animationFrameRef.current = window.requestAnimationFrame(render);
         return;
       }
@@ -617,7 +619,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder={disabled ? 'Agent is processing...' : 'Start a new chat...'}
+        placeholder={placeholder || (disabled ? 'Agent is processing...' : 'Start a new chat...')}
         rows={1}
         disabled={disabled}
       />
