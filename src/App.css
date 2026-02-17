@@ -139,7 +139,7 @@ body.mind-resizing * {
 
 /* Top bar with search */
 .top-bar {
-  padding: 12px 20px 12px 64px;
+  padding: 8px 16px 8px 64px;
   border-bottom: 1px solid #3a3a3a;
   background-color: #1a1a1a;
   flex-shrink: 0;
@@ -611,7 +611,7 @@ body.mind-resizing * {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 12px 20px 12px 64px;
+  padding: 8px 16px;
   border-bottom: 1px solid #3a3a3a;
   background-color: #1a1a1a;
   flex-shrink: 0;
