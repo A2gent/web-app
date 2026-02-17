@@ -3746,6 +3746,40 @@ body.mind-resizing * {
   cursor: not-allowed;
 }
 
+.skills-sort-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sort-btn {
+  padding: 6px 12px;
+  border: 1px solid #444;
+  background: #2b2b2b;
+  color: #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.sort-btn:hover:not(:disabled) {
+  background: #3a3a3a;
+  border-color: #555;
+}
+
+.sort-btn.active {
+  background: #4a5d8a;
+  border-color: #5a6d9a;
+  color: #fff;
+}
+
+.sort-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .skills-registry-results {
   margin-top: 16px;
 }

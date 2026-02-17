@@ -57,6 +57,7 @@ function SkillsView() {
   const [searchResults, setSearchResults] = useState<RegistrySkill[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [installingSkills, setInstallingSkills] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<'installsCurrent' | 'stars'>('installsCurrent');
 
   const loadSettings = async () => {
     try {
@@ -156,23 +157,26 @@ function SkillsView() {
     }
   };
 
-  const handleSearch = async () => {
-    if (searchQuery.trim() === '') {
-      setSearchResults([]);
-      return;
-    }
-
+  const loadRegistrySkills = async () => {
     setIsSearching(true);
     setError(null);
     try {
-      const response = await searchRegistrySkills(searchQuery.trim());
+      const response = await searchRegistrySkills(searchQuery.trim(), 1, 20, sortBy);
       setSearchResults(response.skills);
     } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : 'Failed to search skills');
+      setError(searchError instanceof Error ? searchError.message : 'Failed to load skills');
     } finally {
       setIsSearching(false);
     }
   };
+
+  const handleSearch = async () => {
+    await loadRegistrySkills();
+  };
+  
+  useEffect(() => {
+    void loadRegistrySkills();
+  }, [sortBy]);
 
   const handleInstall = async (skill: RegistrySkill) => {
     if (!connectedFolder) {
@@ -295,7 +299,7 @@ function SkillsView() {
               </div>
 
               <div className="skills-registry-section">
-                <h3>🌐 Install from Clawhub.ai</h3>
+                <h3>🌐 Install from <a href="https://clawhub.ai" target="_blank" rel="noopener noreferrer">Clawhub.ai</a></h3>
                 <p className="settings-help">
                   Search and install skills from the community registry
                 </p>
@@ -318,9 +322,29 @@ function SkillsView() {
                     type="button"
                     className="skills-search-btn"
                     onClick={() => void handleSearch()}
-                    disabled={!connectedFolder || isSearching || searchQuery.trim() === ''}
+                    disabled={!connectedFolder || isSearching}
                   >
                     {isSearching ? 'Searching...' : '🔍 Search'}
+                  </button>
+                </div>
+                
+                <div className="skills-sort-buttons">
+                  <span style={{ marginRight: '8px', fontSize: '14px' }}>Sort by:</span>
+                  <button
+                    type="button"
+                    className={sortBy === 'installsCurrent' ? 'sort-btn active' : 'sort-btn'}
+                    onClick={() => setSortBy('installsCurrent')}
+                    disabled={isSearching}
+                  >
+                    📦 Most Installed
+                  </button>
+                  <button
+                    type="button"
+                    className={sortBy === 'stars' ? 'sort-btn active' : 'sort-btn'}
+                    onClick={() => setSortBy('stars')}
+                    disabled={isSearching}
+                  >
+                    ⭐ Most Stars
                   </button>
                 </div>
 
@@ -337,22 +361,31 @@ function SkillsView() {
                       {searchResults.map((skill) => (
                         <div key={skill.id} className="skill-card skill-card-registry">
                           <div className="skill-card-title-row">
-                            <h3>{skill.name}</h3>
+                            <h3>
+                              <a 
+                                href={`https://clawhub.ai/${skill.id}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                style={{ color: 'inherit', textDecoration: 'none' }}
+                              >
+                                {skill.name}
+                              </a>
+                            </h3>
                             <span className="skill-badge skill-badge-registry">Registry</span>
                           </div>
                           <p className="skill-card-description">{skill.description}</p>
                           <div className="skill-card-meta-row">
-                            <span className="skill-meta-item">
-                              👤 {skill.author}
+                            <span className="skill-meta-item" title="Stars">
+                              ⭐ {skill.rating > 0 ? skill.rating : 0}
                             </span>
-                            <span className="skill-meta-item">
-                              ⭐ {skill.rating.toFixed(1)}
+                            <span className="skill-meta-item" title="Downloads">
+                              ⬇️ {skill.downloads > 0 ? skill.downloads.toLocaleString() : 0}
                             </span>
-                            <span className="skill-meta-item">
-                              ⬇️ {skill.downloads.toLocaleString()}
-                            </span>
-                            <span className="skill-meta-item">
-                              v{skill.version}
+                            {skill.version && (
+                              <span className="skill-meta-item">
+                                v{skill.version}
+                              </span>
+                            )}
                             </span>
                           </div>
                           {skill.tags && skill.tags.length > 0 && (

@@ -1026,12 +1026,28 @@ export async function discoverSkills(folder: string): Promise<SkillDiscoverRespo
   return response.json();
 }
 
-export async function searchRegistrySkills(query: string, page = 1, limit = 20): Promise<SkillSearchResponse> {
+export async function searchRegistrySkills(
+  query: string, 
+  page = 1, 
+  limit = 20,
+  sort?: 'installsCurrent' | 'stars'
+): Promise<SkillSearchResponse> {
   const params = new URLSearchParams({
-    q: query,
-    page: page.toString(),
     limit: limit.toString(),
   });
+  
+  if (query) {
+    params.set('q', query);
+  }
+  
+  if (page > 1) {
+    params.set('page', page.toString());
+  }
+  
+  if (sort) {
+    params.set('sort', sort);
+  }
+  
   const response = await fetch(`${getApiBaseUrl()}/skills/registry/search?${params}`);
   if (!response.ok) {
     throw await buildApiError(response, 'Failed to search registry skills');
