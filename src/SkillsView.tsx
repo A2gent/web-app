@@ -386,7 +386,6 @@ function SkillsView() {
                                 v{skill.version}
                               </span>
                             )}
-                            </span>
                           </div>
                           {skill.tags && skill.tags.length > 0 && (
                             <div className="skill-tags">
