@@ -1965,6 +1965,37 @@ body.mind-resizing * {
   }
 }
 
+/* Large version of status dot for detail view */
+.session-status-dot-large {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #777;
+  box-sizing: border-box;
+  display: inline-block;
+  flex-shrink: 0;
+  margin-right: 10px;
+}
+
+.session-status-dot-large.status-running {
+  background-color: transparent;
+  border: 3px solid rgba(76, 175, 80, 0.3);
+  border-top-color: #4caf50;
+  animation: session-status-spin 0.8s linear infinite;
+}
+
+.session-status-dot-large.status-completed {
+  background-color: #2196f3;
+}
+
+.session-status-dot-large.status-failed {
+  background-color: #f44336;
+}
+
+.session-status-dot-large.status-paused {
+  background-color: #ff9800;
+}
+
 .session-row-right {
   display: flex;
   align-items: center;

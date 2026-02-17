@@ -417,6 +417,11 @@ function ChatView() {
           {session ? (
             <div className="session-meta-stack">
               <div className="session-meta-row">
+                <span
+                  className={`session-status-dot-large status-${session.status}`}
+                  title={`Status: ${session.status}`}
+                  aria-label={`Status: ${session.status}`}
+                />
                 <span className="session-title">{session.title || 'Untitled Session'}</span>
                 {session.provider ? <span className="session-provider-chip">{session.provider}</span> : null}
                 {session.model ? <span className="session-provider-chip">{session.model}</span> : null}
@@ -425,9 +430,6 @@ function ChatView() {
                     Routed to {routedTarget}
                   </span>
                 ) : null}
-                <span className={`session-status status-${session.status}`}>
-                  {session.status}
-                </span>
               </div>
               {session.status === 'failed' && sessionFailureReason ? (
                 <div className="session-failure-reason" title={sessionFailureReason}>
