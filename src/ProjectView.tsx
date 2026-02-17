@@ -479,10 +479,18 @@ function ProjectView() {
         const proj = await getProject(projectId);
         setProject(proj);
         setRootFolder(proj.folder || '');
+        // Clear file tree state when switching projects
+        setTreeEntries({});
+        setLoadingDirs(new Set());
+        setSelectedFilePath('');
+        setSelectedFileContent('');
+        setSavedFileContent('');
         // Load stored file state for this project
         if (proj.folder) {
           setExpandedDirs(readStoredExpandedDirs(projectId));
           setSelectedFilePath(readStoredSelectedFile(projectId));
+        } else {
+          setExpandedDirs(new Set(['']));
         }
       } catch (err) {
         console.error('Failed to load project:', err);
@@ -579,7 +587,17 @@ function ProjectView() {
       }));
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : 'Failed to load folder tree';
-      setError(message);
+      console.error('Failed to list directory:', message);
+      // Remove the path from expandedDirs if it doesn't exist
+      setExpandedDirs((prev) => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
+      // Only show error for root path, silently skip non-existent subdirs
+      if (path === '') {
+        setError(message);
+      }
     } finally {
       setLoadingDirs((prev) => {
         const next = new Set(prev);
@@ -593,17 +611,13 @@ function ProjectView() {
   useEffect(() => {
     if (rootFolder) {
       void loadTree('');
-      // Also load expanded directories
-      if (projectId) {
-        const storedExpanded = readStoredExpandedDirs(projectId);
-        const expandedArray = Array.from(storedExpanded).filter((p) => p !== '');
-        if (expandedArray.length > 0) {
-          setExpandedDirs(storedExpanded);
-          expandedArray.forEach((path) => void loadTree(path));
-        }
+      // Also load expanded directories (but only non-empty paths)
+      const expandedArray = Array.from(expandedDirs).filter((p) => p !== '');
+      if (expandedArray.length > 0) {
+        expandedArray.forEach((path) => void loadTree(path));
       }
     }
-  }, [rootFolder, loadTree, projectId]);
+  }, [rootFolder, loadTree, expandedDirs]);
 
   // Load selected file content
   useEffect(() => {

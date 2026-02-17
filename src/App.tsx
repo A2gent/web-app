@@ -267,20 +267,18 @@ function AppLayout() {
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
-      if (!resizeStartRef.current) {
-        return;
-      }
-
-      const deltaX = event.clientX - resizeStartRef.current.startX;
-      const nextWidth = resizeStartRef.current.startWidth + deltaX;
-      const boundedWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, nextWidth));
-      setSidebarWidth(Math.round(boundedWidth));
+      if (!resizeStartRef.current) return;
+      const delta = event.clientX - resizeStartRef.current.startX;
+      const newWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, resizeStartRef.current.startWidth + delta));
+      setSidebarWidth(newWidth);
     };
 
     const handlePointerUp = () => {
-      resizeStartRef.current = null;
-      document.body.classList.remove('sidebar-resizing');
-      document.body.style.userSelect = '';
+      if (resizeStartRef.current) {
+        resizeStartRef.current = null;
+        document.body.classList.remove('sidebar-resizing');
+        document.body.style.userSelect = '';
+      }
     };
 
     window.addEventListener('pointermove', handlePointerMove);
