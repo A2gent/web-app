@@ -36,6 +36,7 @@ import {
 } from './skills';
 import { IntegrationProviderIcon, integrationProviderLabel } from './integrationMeta';
 import { toolIconForName } from './toolIcons';
+import { ToolIcon } from './ToolIcon';
 
 function getParentPath(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, '');
@@ -596,7 +597,11 @@ function ToolsView() {
                   <div key={skill.id} className="skill-card skill-card-builtin">
                     <div className="skill-card-title-row">
                       <h3 className="skill-title-with-icon">
-                        <span className="tool-icon" aria-hidden="true">{toolIconForName(skill.name)}</span>
+                        {skill.name === 'browser_chrome' ? (
+                          <ToolIcon toolName={skill.name} />
+                        ) : (
+                          <span className="tool-icon" aria-hidden="true">{toolIconForName(skill.name)}</span>
+                        )}
                         <span>{skill.name}</span>
                       </h3>
                       <span className="skill-badge">{skill.kind === 'tool' ? 'Tool' : 'Built-in'}</span>

@@ -2785,6 +2785,34 @@ body.mind-resizing * {
   color: #fff7ed;
 }
 
+.integration-provider-icon-exa {
+  background: #1a1a1a;
+  color: #00d4ff;
+}
+
+/* Tool icon components (similar to integration provider icons) */
+.tool-icon-component {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tool-icon-svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  color: inherit;
+}
+
+.tool-icon-browser-chrome {
+  background: linear-gradient(135deg, #4285f4 0%, #34a853 33%, #fbbc05 66%, #ea4335 100%);
+  color: #fff;
+}
+
 .integration-count-badge {
   font-size: 11px;
   color: #bbb;

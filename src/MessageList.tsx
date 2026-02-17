@@ -6,6 +6,7 @@ import { renderMarkdownToHtml } from './markdown';
 import { buildOpenInMyMindUrl, extractToolFilePath, isSupportedFileTool } from './myMindNavigation';
 import { readImagePreviewEvent, readWebAppNotification } from './toolResultEvents';
 import { toolIconForName } from './toolIcons';
+import { ToolIcon } from './ToolIcon';
 import { emitWebAppNotification } from './webappNotifications';
 
 interface MessageListProps {
@@ -267,7 +268,11 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
                 </span>
               ) : null}
               <span className="tool-name tool-name-with-icon">
-                <span className="tool-icon" aria-hidden="true">{toolIcon}</span>
+                {toolCall.name === 'browser_chrome' ? (
+                  <ToolIcon toolName={toolCall.name} />
+                ) : (
+                  <span className="tool-icon" aria-hidden="true">{toolIcon}</span>
+                )}
                 <span>{toolCall.name}</span>
               </span>
               {filePath ? (

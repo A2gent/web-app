@@ -18,6 +18,7 @@ const TOOL_ICONS_BY_NAME: Record<string, string> = {
   piper_tts: '🔊',
   notify_webapp: '🔔',
   telegram_send_message: '✉️',
+  browser_chrome: '🧭',
 };
 
 export function toolIconForName(toolName: string): string {
