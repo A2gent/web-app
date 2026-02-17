@@ -696,6 +696,7 @@ function AppLayout() {
         <Routes>
           <Route path="/" element={<Navigate to="/sessions" replace />} />
           <Route path="/sessions" element={<SessionsListWrapper />} />
+          <Route path="/agent/sessions" element={<Navigate to="/sessions" replace />} />
           <Route path="/chat/:sessionId?" element={<ChatView />} />
           <Route path="/agent/jobs" element={<JobsList />} />
           <Route path="/agent/jobs/new" element={<JobEdit />} />

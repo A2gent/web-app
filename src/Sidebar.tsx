@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import {
+  listProjects,
+  createProject,
+  type Project,
+} from './api';
 
 interface NavItem {
   id: string;
@@ -13,17 +18,36 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
-const navItems: NavItem[] = [
-  { id: 'sessions', label: '💬 Sessions', path: '/sessions' },
-  { id: 'my-mind', label: '🧠 My Mind', path: '/my-mind' },
-  { id: 'thinking', label: '🤔 Thinking', path: '/thinking' },
-  { id: 'jobs', label: '🗓️ Recurring jobs', path: '/agent/jobs' },
-  { id: 'tools', label: '🧰 Tools', path: '/tools' },
-  { id: 'skills', label: '📚 Skills', path: '/skills' },
-  { id: 'settings', label: '⚙️ Settings', path: '/settings' },
-  { id: 'integrations', label: '🔌 Integrations', path: '/integrations' },
-  { id: 'mcp', label: '🧩 MCP', path: '/mcp' },
-  { id: 'providers', label: '🤖 LLM providers', path: '/providers' },
+interface NavSection {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+const navSections: NavSection[] = [
+  {
+    id: 'user',
+    label: '🧠 Knowledge Base',
+    items: [
+      { id: 'kb-sessions', label: '💬 Sessions', path: '/sessions' },
+      { id: 'kb-files', label: '📁 Files', path: '/my-mind' },
+    ],
+  },
+  {
+    id: 'agent',
+    label: '🤖 Agent',
+    items: [
+      { id: 'agent-sessions', label: '💬 Sessions', path: '/agent/sessions' },
+      { id: 'thinking', label: '🤔 Thinking', path: '/thinking' },
+      { id: 'jobs', label: '🗓️ Recurring jobs', path: '/agent/jobs' },
+      { id: 'tools', label: '🧰 Tools', path: '/tools' },
+      { id: 'skills', label: '📚 Skills', path: '/skills' },
+      { id: 'mcp', label: '🧩 MCP', path: '/mcp' },
+      { id: 'integrations', label: '🔌 Integrations', path: '/integrations' },
+      { id: 'providers', label: '🤖 LLM providers', path: '/providers' },
+      { id: 'settings', label: '⚙️ Settings', path: '/settings' },
+    ],
+  },
 ];
 
 function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
@@ -31,6 +55,12 @@ function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(title);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Projects state
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
 
   useEffect(() => {
     setTitleDraft(title);
@@ -44,6 +74,20 @@ function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
     titleInputRef.current?.select();
   }, [isEditingTitle]);
 
+  // Load projects
+  const loadProjects = useCallback(async () => {
+    try {
+      const data = await listProjects();
+      setProjects(data);
+    } catch (err) {
+      console.error('Failed to load projects:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
   const commitTitleEdit = () => {
     onTitleChange(titleDraft);
     setIsEditingTitle(false);
@@ -52,6 +96,23 @@ function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
   const cancelTitleEdit = () => {
     setTitleDraft(title);
     setIsEditingTitle(false);
+  };
+
+  const handleCreateProject = async () => {
+    const name = newProjectName.trim();
+    if (!name) return;
+
+    setIsCreatingProject(true);
+    try {
+      await createProject({ name, folders: [] });
+      setNewProjectName('');
+      setIsCreateProjectOpen(false);
+      await loadProjects();
+    } catch (err) {
+      console.error('Failed to create project:', err);
+    } finally {
+      setIsCreatingProject(false);
+    }
   };
 
   return (
@@ -88,19 +149,83 @@ function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
       </div>
 
       <nav className="sidebar-nav">
-        <ul className="nav-list">
-          {navItems.map(item => (
-            <li key={item.id} className="nav-item">
-              <Link
-                to={item.path}
-                className={`nav-link ${location.pathname.startsWith(item.path) ? 'active' : ''}`}
-                onClick={onNavigate}
+        {navSections.map(section => (
+          <div key={section.id} className="nav-section">
+            <div className="nav-section-header">{section.label}</div>
+            <ul className="nav-list">
+              {section.items.map(item => (
+                <li key={item.id} className="nav-item">
+                  <Link
+                    to={item.path}
+                    className={`nav-link ${location.pathname.startsWith(item.path) ? 'active' : ''}`}
+                    onClick={onNavigate}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+
+        {/* Projects Section */}
+        <div className="nav-section">
+          <div className="nav-section-header">📂 Projects</div>
+          <ul className="nav-list">
+            {projects.map(project => (
+              <li key={project.id} className="nav-item">
+                <Link
+                  to={`/projects/${project.id}`}
+                  className={`nav-link ${location.pathname.startsWith(`/projects/${project.id}`) ? 'active' : ''}`}
+                  onClick={onNavigate}
+                >
+                  {project.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          {/* Add Project Button */}
+          <button
+            type="button"
+            className="sidebar-add-project-btn"
+            onClick={() => setIsCreateProjectOpen(prev => !prev)}
+            aria-expanded={isCreateProjectOpen}
+          >
+            <span className="sidebar-add-project-line" />
+            <span className="sidebar-add-project-label">Add project</span>
+            <span className="sidebar-add-project-line" />
+          </button>
+
+          {/* Create Project Form */}
+          {isCreateProjectOpen && (
+            <div className="sidebar-create-project-form">
+              <input
+                type="text"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="Project name"
+                className="sidebar-project-input"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    void handleCreateProject();
+                  } else if (e.key === 'Escape') {
+                    setIsCreateProjectOpen(false);
+                    setNewProjectName('');
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="sidebar-project-create-btn"
+                onClick={() => void handleCreateProject()}
+                disabled={isCreatingProject || !newProjectName.trim()}
               >
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+                {isCreatingProject ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          )}
+        </div>
       </nav>
     </div>
   );

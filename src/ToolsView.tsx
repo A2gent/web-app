@@ -35,7 +35,12 @@ import {
   speedToOptionIndex,
 } from './skills';
 import { IntegrationProviderIcon, integrationProviderLabel } from './integrationMeta';
-import { toolIconForName } from './toolIcons';
+import {
+  toolIconForName,
+  getToolCategory,
+  TOOL_CATEGORIES,
+  type ToolCategory,
+} from './toolIcons';
 import { ToolIcon } from './ToolIcon';
 
 function getParentPath(path: string): string {
@@ -155,6 +160,28 @@ function ToolsView() {
 
   const [builtInSkills, setBuiltInSkills] = useState<BuiltInSkill[]>([]);
   const [integrationSkills, setIntegrationSkills] = useState<IntegrationBackedSkill[]>([]);
+
+  // Group built-in skills by category
+  const groupedBuiltInSkills = useMemo(() => {
+    const groups = new Map<ToolCategory, BuiltInSkill[]>();
+    // Initialize all categories in order
+    for (const cat of TOOL_CATEGORIES) {
+      groups.set(cat.id, []);
+    }
+    groups.set('other', []);
+
+    for (const skill of builtInSkills) {
+      const category = getToolCategory(skill.name);
+      const list = groups.get(category) || [];
+      list.push(skill);
+      groups.set(category, list);
+    }
+
+    // Return only non-empty groups in category order
+    return TOOL_CATEGORIES
+      .map((cat) => ({ category: cat, skills: groups.get(cat.id) || [] }))
+      .filter((g) => g.skills.length > 0);
+  }, [builtInSkills]);
 
   // Browser Chrome state
   const [chromeHeadless, setChromeHeadless] = useState(false);
@@ -592,310 +619,327 @@ function ToolsView() {
               <p className="settings-help">
                 Built-in skills are always available to the agent. They can be invoked by agent logic as part of the session flow.
               </p>
-              <div className="skills-grid">
-                {builtInSkills.map((skill) => (
-                  <div key={skill.id} className="skill-card skill-card-builtin">
-                    <div className="skill-card-title-row">
-                      <h3 className="skill-title-with-icon">
-                        {skill.name === 'browser_chrome' ? (
-                          <ToolIcon toolName={skill.name} />
-                        ) : (
-                          <span className="tool-icon" aria-hidden="true">{toolIconForName(skill.name)}</span>
-                        )}
-                        <span>{skill.name}</span>
-                      </h3>
-                      <span className="skill-badge">{skill.kind === 'tool' ? 'Tool' : 'Built-in'}</span>
-                    </div>
-                    <p>{skill.description}</p>
-                    {skill.name === 'take_screenshot_tool' ? (
-                      <details className="skill-tool-details">
-                        <summary>Configure defaults</summary>
-                        <p>Defaults used by this tool when no output path/display is passed.</p>
-                        <div className="settings-group">
-                          <label className="settings-field">
-                            <span>Default output directory</span>
-                            <div className="tool-folder-picker-row">
-                              <input
-                                type="text"
-                                value={screenshotOutputDir}
-                                onChange={(event) => setScreenshotOutputDir(event.target.value)}
-                                placeholder="/tmp"
-                                autoComplete="off"
-                              />
-                              <button type="button" className="settings-add-btn" onClick={() => void openPicker('screenshot')}>
-                                Browse
-                              </button>
-                            </div>
-                          </label>
-                          <label className="settings-field">
-                            <span>Default display index (optional)</span>
-                            <input
-                              type="text"
-                              value={screenshotDisplayIndex}
-                              onChange={(event) => setScreenshotDisplayIndex(event.target.value)}
-                              placeholder="1"
-                              autoComplete="off"
-                            />
-                            <div className="settings-help">
-                              1-based monitor index used by <code>take_screenshot_tool</code> when no explicit target/display is passed.
-                            </div>
-                          </label>
+              {groupedBuiltInSkills.length === 0 ? (
+                <div className="sessions-loading">Loading skills...</div>
+              ) : (
+                <div className="skills-categories">
+                  {groupedBuiltInSkills.map(({ category, skills }) => (
+                    <div key={category.id} className="skill-category-section">
+                      <div className="skill-category-header">
+                        <span className="skill-category-icon" aria-hidden="true">{category.icon}</span>
+                        <div className="skill-category-title">
+                          <h3>{category.label}</h3>
+                          <p className="skill-category-description">{category.description}</p>
                         </div>
-                      </details>
-                    ) : null}
-                    {skill.name === 'take_camera_photo_tool' ? (
-                      <details className="skill-tool-details">
-                        <summary>Configure defaults</summary>
-                        <p>Defaults used by this tool when no output path/camera index is passed.</p>
-                        <div className="settings-group">
-                          <label className="settings-field">
-                            <span>Default output directory</span>
-                            <div className="tool-folder-picker-row">
-                              <input
-                                type="text"
-                                value={cameraOutputDir}
-                                onChange={(event) => setCameraOutputDir(event.target.value)}
-                                placeholder="/tmp"
-                                autoComplete="off"
-                              />
-                              <button type="button" className="settings-add-btn" onClick={() => void openPicker('camera')}>
-                                Browse
-                              </button>
-                            </div>
-                          </label>
-                          <label className="settings-field">
-                            <span>Default backend camera</span>
-                            <div className="tool-folder-picker-row">
-                              <select value={cameraIndex} onChange={(event) => setCameraIndex(event.target.value)}>
-                                <option value="">Auto (index 1)</option>
-                                {backendCameras.map((camera) => (
-                                  <option key={`${camera.index}:${camera.id || camera.name}`} value={String(camera.index)}>
-                                    #{camera.index} {camera.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                className="settings-add-btn"
-                                onClick={() => void loadBackendCameras()}
-                                disabled={isLoadingBackendCameras}
-                              >
-                                {isLoadingBackendCameras ? 'Loading...' : 'Refresh'}
-                              </button>
-                            </div>
-                            <div className="settings-help">
-                              Uses backend camera index for <code>take_camera_photo_tool</code>.
-                            </div>
-                          </label>
-                          {backendCamerasError ? <div className="settings-error">{backendCamerasError}</div> : null}
-                          {!isLikelySameHost ? (
-                            <div className="settings-help">
-                              Browser and backend appear to be on different hosts, so browser preview devices may not match backend camera indices.
-                            </div>
-                          ) : (
-                            <div className="settings-help">
-                              Browser and backend look like the same host, so camera mapping should usually align.
-                            </div>
-                          )}
-                          <div className="settings-field">
-                            <span>Browser camera preview</span>
-                            <div className="tool-folder-picker-row">
-                              <button
-                                type="button"
-                                className="settings-add-btn"
-                                onClick={() => void startCameraPreview(selectedBrowserCameraId)}
-                                disabled={isStartingPreview}
-                              >
-                                {isStartingPreview ? 'Starting...' : 'Enable preview'}
-                              </button>
-                              <button type="button" className="settings-remove-btn" onClick={() => stopCameraPreview()}>
-                                Stop preview
-                              </button>
-                            </div>
-                            <select
-                              value={selectedBrowserCameraId}
-                              onChange={(event) => {
-                                const deviceId = event.target.value;
-                                setSelectedBrowserCameraId(deviceId);
-                                if (deviceId.trim() !== '') {
-                                  void startCameraPreview(deviceId);
-                                }
-                              }}
-                              disabled={browserCameras.length === 0}
-                            >
-                              {browserCameras.length === 0 ? (
-                                <option value="">Enable preview to list browser cameras</option>
-                              ) : (
-                                browserCameras.map((camera) => (
-                                  <option key={camera.deviceId} value={camera.deviceId}>
-                                    {camera.label}
-                                  </option>
-                                ))
-                              )}
-                            </select>
-                            <video ref={previewVideoRef} className="tool-camera-preview" playsInline muted />
-                            {previewError ? <div className="settings-error">{previewError}</div> : null}
-                            {selectedBrowserCamera && suggestedBackendCamera ? (
-                              <div className="settings-help">
-                                Suggested backend camera: #{suggestedBackendCamera.index} {suggestedBackendCamera.name}{' '}
-                                <button
-                                  type="button"
-                                  className="settings-add-btn"
-                                  onClick={() => setCameraIndex(String(suggestedBackendCamera.index))}
-                                >
-                                  Use suggestion
-                                </button>
-                              </div>
-                            ) : null}
-                            {selectedBrowserCamera && !suggestedBackendCamera ? (
-                              <div className="settings-help">
-                                Could not confidently map this browser camera to a backend camera index. Pick backend camera manually.
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </details>
-                    ) : null}
-                    {skill.name === 'piper_tts' ? (
-                      <details className="skill-tool-details">
-                        <summary>Configure defaults</summary>
-                        <p>Defaults used by <code>piper_tts</code> when no model/voice is explicitly passed.</p>
-                        <div className="settings-group">
-                          <label className="settings-field">
-                            <span>Default Piper voice/model ID</span>
-                            <select
-                              value={piperModel}
-                              onChange={(event) => setPiperModel(event.target.value)}
-                              disabled={isLoadingPiperVoices && piperVoiceOptions.length === 0}
-                            >
-                              {piperVoiceOptions.length === 0 ? (
-                                <option value="en_US-lessac-medium">
-                                  {isLoadingPiperVoices ? 'Loading Piper voices...' : 'en_US-lessac-medium'}
-                                </option>
-                              ) : (
-                                piperVoiceOptions.map((voice) => (
-                                  <option key={voice.id} value={voice.id}>
-                                    {voice.id}{voice.installed ? ' (installed)' : ''}
-                                  </option>
-                                ))
-                              )}
-                            </select>
-                            <div className="settings-help">
-                              Saved as <code>PIPER_MODEL</code>. Pick a multilingual voice/model (for example <code>ru_RU-ruslan-medium</code> for Russian).
-                            </div>
-                          </label>
-                          <div className="settings-help">
-                            {isLoadingPiperVoices ? 'Loading Piper voices...' : `Loaded ${piperVoiceOptions.length} Piper voice options.`}
-                          </div>
-                          {piperVoices.some((voice) => voice.installed) ? (
-                            <div className="settings-help">
-                              Installed voices:{' '}
-                              {piperVoices
-                                .filter((voice) => voice.installed)
-                                .map((voice) => voice.id)
-                                .join(', ')}
-                            </div>
-                          ) : null}
-                          {piperVoicesError ? <div className="settings-error">{piperVoicesError}</div> : null}
-                        </div>
-                      </details>
-                    ) : null}
-                    {skill.name === 'whisper_stt' ? (
-                      <details className="skill-tool-details">
-                        <summary>Configure defaults</summary>
-                        <p>Defaults used by <code>whisper_stt</code> and mic transcription.</p>
-                        <div className="settings-group">
-                          <label className="settings-field">
-                            <span>Default transcription language</span>
-                            <select
-                              value={whisperLanguage}
-                              onChange={(event) => setWhisperLanguage(event.target.value)}
-                            >
-                              <option value="auto">Auto-detect</option>
-                              <option value="en">English</option>
-                              <option value="ru">Russian</option>
-                              <option value="uk">Ukrainian</option>
-                              <option value="de">German</option>
-                              <option value="fr">French</option>
-                              <option value="es">Spanish</option>
-                              <option value="it">Italian</option>
-                              <option value="pt">Portuguese</option>
-                              <option value="pl">Polish</option>
-                              <option value="tr">Turkish</option>
-                              <option value="ja">Japanese</option>
-                              <option value="ko">Korean</option>
-                              <option value="zh">Chinese</option>
-                            </select>
-                            <div className="settings-help">
-                              Saved as <code>AAGENT_WHISPER_LANGUAGE</code>. Use <code>ru</code> to keep Russian text in Russian.
-                            </div>
-                          </label>
-                          <label className="settings-field settings-checkbox">
-                            <span>Translate transcript to English</span>
-                            <input
-                              type="checkbox"
-                              checked={whisperTranslateToEnglish}
-                              onChange={(event) => setWhisperTranslateToEnglish(event.target.checked)}
-                            />
-                            <div className="settings-help">
-                              Saved as <code>AAGENT_WHISPER_TRANSLATE</code>. Turn this off to keep original language output.
-                            </div>
-                          </label>
-                        </div>
-                      </details>
-                    ) : null}
-                    {skill.name === 'browser_chrome' ? (
-                      <details className="skill-tool-details">
-                        <summary>Configure browser</summary>
-                        <p>Settings for Chrome browser automation.</p>
-                        <div className="settings-group">
-                          <label className="settings-field settings-checkbox">
-                            <span>Headless mode (no GUI)</span>
-                            <input
-                              type="checkbox"
-                              checked={chromeHeadless}
-                              onChange={(event) => setChromeHeadless(event.target.checked)}
-                            />
-                            <div className="settings-help">
-                              Run Chrome without visible window. Faster but cannot see or interact with the browser manually.
-                            </div>
-                          </label>
-                          <div className="settings-field">
-                            <span>Agent Profile</span>
-                            <div className="tool-folder-picker-row">
-                              {isLoadingBrowserChromeProfile ? (
-                                <span>Loading...</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="settings-add-btn"
-                                  onClick={() => void handleLaunchBrowserChrome()}
-                                  disabled={isLaunchingBrowserChrome}
-                                >
-                                  {isLaunchingBrowserChrome ? 'Opening...' : (browserChromeProfile?.exists ? 'Open Agent Profile' : 'Create & Open Agent Profile')}
-                                </button>
-                              )}
-                            </div>
-                            <div className="settings-help" style={{ marginTop: '8px' }}>
-                              Opens a new Chrome window with the agent profile as a separate "person".
-                              You can have both your main profile and agent profile open at the same time.
-                              Log in to websites in the agent window - the agent will use these sessions.
-                            </div>
-                            {browserChromeProfile?.exists ? (
-                              <div className="settings-help" style={{ marginTop: '8px' }}>
-                                <div>Profile exists at: <code>~/Library/Application Support/Google/Chrome/AgentProfile</code></div>
-                                {browserChromeProfile.lastUsed && (
-                                  <div>Last modified: {new Date(browserChromeProfile.lastUsed).toLocaleString()}</div>
+                      </div>
+                      <div className="skills-grid">
+                        {skills.map((skill) => (
+                          <div key={skill.id} className="skill-card skill-card-builtin">
+                            <div className="skill-card-title-row">
+                              <h3 className="skill-title-with-icon">
+                                {skill.name === 'browser_chrome' ? (
+                                  <ToolIcon toolName={skill.name} />
+                                ) : (
+                                  <span className="tool-icon" aria-hidden="true">{toolIconForName(skill.name)}</span>
                                 )}
-                              </div>
+                                <span>{skill.name}</span>
+                              </h3>
+                              <span className="skill-badge">{skill.kind === 'tool' ? 'Tool' : 'Built-in'}</span>
+                            </div>
+                            <p>{skill.description}</p>
+                            {skill.name === 'take_screenshot_tool' ? (
+                              <details className="skill-tool-details">
+                                <summary>Configure defaults</summary>
+                                <p>Defaults used by this tool when no output path/display is passed.</p>
+                                <div className="settings-group">
+                                  <label className="settings-field">
+                                    <span>Default output directory</span>
+                                    <div className="tool-folder-picker-row">
+                                      <input
+                                        type="text"
+                                        value={screenshotOutputDir}
+                                        onChange={(event) => setScreenshotOutputDir(event.target.value)}
+                                        placeholder="/tmp"
+                                        autoComplete="off"
+                                      />
+                                      <button type="button" className="settings-add-btn" onClick={() => void openPicker('screenshot')}>
+                                        Browse
+                                      </button>
+                                    </div>
+                                  </label>
+                                  <label className="settings-field">
+                                    <span>Default display index (optional)</span>
+                                    <input
+                                      type="text"
+                                      value={screenshotDisplayIndex}
+                                      onChange={(event) => setScreenshotDisplayIndex(event.target.value)}
+                                      placeholder="1"
+                                      autoComplete="off"
+                                    />
+                                    <div className="settings-help">
+                                      1-based monitor index used by <code>take_screenshot_tool</code> when no explicit target/display is passed.
+                                    </div>
+                                  </label>
+                                </div>
+                              </details>
+                            ) : null}
+                            {skill.name === 'take_camera_photo_tool' ? (
+                              <details className="skill-tool-details">
+                                <summary>Configure defaults</summary>
+                                <p>Defaults used by this tool when no output path/camera index is passed.</p>
+                                <div className="settings-group">
+                                  <label className="settings-field">
+                                    <span>Default output directory</span>
+                                    <div className="tool-folder-picker-row">
+                                      <input
+                                        type="text"
+                                        value={cameraOutputDir}
+                                        onChange={(event) => setCameraOutputDir(event.target.value)}
+                                        placeholder="/tmp"
+                                        autoComplete="off"
+                                      />
+                                      <button type="button" className="settings-add-btn" onClick={() => void openPicker('camera')}>
+                                        Browse
+                                      </button>
+                                    </div>
+                                  </label>
+                                  <label className="settings-field">
+                                    <span>Default backend camera</span>
+                                    <div className="tool-folder-picker-row">
+                                      <select value={cameraIndex} onChange={(event) => setCameraIndex(event.target.value)}>
+                                        <option value="">Auto (index 1)</option>
+                                        {backendCameras.map((camera) => (
+                                          <option key={`${camera.index}:${camera.id || camera.name}`} value={String(camera.index)}>
+                                            #{camera.index} {camera.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        type="button"
+                                        className="settings-add-btn"
+                                        onClick={() => void loadBackendCameras()}
+                                        disabled={isLoadingBackendCameras}
+                                      >
+                                        {isLoadingBackendCameras ? 'Loading...' : 'Refresh'}
+                                      </button>
+                                    </div>
+                                    <div className="settings-help">
+                                      Uses backend camera index for <code>take_camera_photo_tool</code>.
+                                    </div>
+                                  </label>
+                                  {backendCamerasError ? <div className="settings-error">{backendCamerasError}</div> : null}
+                                  {!isLikelySameHost ? (
+                                    <div className="settings-help">
+                                      Browser and backend appear to be on different hosts, so browser preview devices may not match backend camera indices.
+                                    </div>
+                                  ) : (
+                                    <div className="settings-help">
+                                      Browser and backend look like the same host, so camera mapping should usually align.
+                                    </div>
+                                  )}
+                                  <div className="settings-field">
+                                    <span>Browser camera preview</span>
+                                    <div className="tool-folder-picker-row">
+                                      <button
+                                        type="button"
+                                        className="settings-add-btn"
+                                        onClick={() => void startCameraPreview(selectedBrowserCameraId)}
+                                        disabled={isStartingPreview}
+                                      >
+                                        {isStartingPreview ? 'Starting...' : 'Enable preview'}
+                                      </button>
+                                      <button type="button" className="settings-remove-btn" onClick={() => stopCameraPreview()}>
+                                        Stop preview
+                                      </button>
+                                    </div>
+                                    <select
+                                      value={selectedBrowserCameraId}
+                                      onChange={(event) => {
+                                        const deviceId = event.target.value;
+                                        setSelectedBrowserCameraId(deviceId);
+                                        if (deviceId.trim() !== '') {
+                                          void startCameraPreview(deviceId);
+                                        }
+                                      }}
+                                      disabled={browserCameras.length === 0}
+                                    >
+                                      {browserCameras.length === 0 ? (
+                                        <option value="">Enable preview to list browser cameras</option>
+                                      ) : (
+                                        browserCameras.map((camera) => (
+                                          <option key={camera.deviceId} value={camera.deviceId}>
+                                            {camera.label}
+                                          </option>
+                                        ))
+                                      )}
+                                    </select>
+                                    <video ref={previewVideoRef} className="tool-camera-preview" playsInline muted />
+                                    {previewError ? <div className="settings-error">{previewError}</div> : null}
+                                    {selectedBrowserCamera && suggestedBackendCamera ? (
+                                      <div className="settings-help">
+                                        Suggested backend camera: #{suggestedBackendCamera.index} {suggestedBackendCamera.name}{' '}
+                                        <button
+                                          type="button"
+                                          className="settings-add-btn"
+                                          onClick={() => setCameraIndex(String(suggestedBackendCamera.index))}
+                                        >
+                                          Use suggestion
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                    {selectedBrowserCamera && !suggestedBackendCamera ? (
+                                      <div className="settings-help">
+                                        Could not confidently map this browser camera to a backend camera index. Pick backend camera manually.
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </details>
+                            ) : null}
+                            {skill.name === 'piper_tts' ? (
+                              <details className="skill-tool-details">
+                                <summary>Configure defaults</summary>
+                                <p>Defaults used by <code>piper_tts</code> when no model/voice is explicitly passed.</p>
+                                <div className="settings-group">
+                                  <label className="settings-field">
+                                    <span>Default Piper voice/model ID</span>
+                                    <select
+                                      value={piperModel}
+                                      onChange={(event) => setPiperModel(event.target.value)}
+                                      disabled={isLoadingPiperVoices && piperVoiceOptions.length === 0}
+                                    >
+                                      {piperVoiceOptions.length === 0 ? (
+                                        <option value="en_US-lessac-medium">
+                                          {isLoadingPiperVoices ? 'Loading Piper voices...' : 'en_US-lessac-medium'}
+                                        </option>
+                                      ) : (
+                                        piperVoiceOptions.map((voice) => (
+                                          <option key={voice.id} value={voice.id}>
+                                            {voice.id}{voice.installed ? ' (installed)' : ''}
+                                          </option>
+                                        ))
+                                      )}
+                                    </select>
+                                    <div className="settings-help">
+                                      Saved as <code>PIPER_MODEL</code>. Pick a multilingual voice/model (for example <code>ru_RU-ruslan-medium</code> for Russian).
+                                    </div>
+                                  </label>
+                                  <div className="settings-help">
+                                    {isLoadingPiperVoices ? 'Loading Piper voices...' : `Loaded ${piperVoiceOptions.length} Piper voice options.`}
+                                  </div>
+                                  {piperVoices.some((voice) => voice.installed) ? (
+                                    <div className="settings-help">
+                                      Installed voices:{' '}
+                                      {piperVoices
+                                        .filter((voice) => voice.installed)
+                                        .map((voice) => voice.id)
+                                        .join(', ')}
+                                    </div>
+                                  ) : null}
+                                  {piperVoicesError ? <div className="settings-error">{piperVoicesError}</div> : null}
+                                </div>
+                              </details>
+                            ) : null}
+                            {skill.name === 'whisper_stt' ? (
+                              <details className="skill-tool-details">
+                                <summary>Configure defaults</summary>
+                                <p>Defaults used by <code>whisper_stt</code> and mic transcription.</p>
+                                <div className="settings-group">
+                                  <label className="settings-field">
+                                    <span>Default transcription language</span>
+                                    <select
+                                      value={whisperLanguage}
+                                      onChange={(event) => setWhisperLanguage(event.target.value)}
+                                    >
+                                      <option value="auto">Auto-detect</option>
+                                      <option value="en">English</option>
+                                      <option value="ru">Russian</option>
+                                      <option value="uk">Ukrainian</option>
+                                      <option value="de">German</option>
+                                      <option value="fr">French</option>
+                                      <option value="es">Spanish</option>
+                                      <option value="it">Italian</option>
+                                      <option value="pt">Portuguese</option>
+                                      <option value="pl">Polish</option>
+                                      <option value="tr">Turkish</option>
+                                      <option value="ja">Japanese</option>
+                                      <option value="ko">Korean</option>
+                                      <option value="zh">Chinese</option>
+                                    </select>
+                                    <div className="settings-help">
+                                      Saved as <code>AAGENT_WHISPER_LANGUAGE</code>. Use <code>ru</code> to keep Russian text in Russian.
+                                    </div>
+                                  </label>
+                                  <label className="settings-field settings-checkbox">
+                                    <span>Translate transcript to English</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={whisperTranslateToEnglish}
+                                      onChange={(event) => setWhisperTranslateToEnglish(event.target.checked)}
+                                    />
+                                    <div className="settings-help">
+                                      Saved as <code>AAGENT_WHISPER_TRANSLATE</code>. Turn this off to keep original language output.
+                                    </div>
+                                  </label>
+                                </div>
+                              </details>
+                            ) : null}
+                            {skill.name === 'browser_chrome' ? (
+                              <details className="skill-tool-details">
+                                <summary>Configure browser</summary>
+                                <p>Settings for Chrome browser automation.</p>
+                                <div className="settings-group">
+                                  <label className="settings-field settings-checkbox">
+                                    <span>Headless mode (no GUI)</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={chromeHeadless}
+                                      onChange={(event) => setChromeHeadless(event.target.checked)}
+                                    />
+                                    <div className="settings-help">
+                                      Run Chrome without visible window. Faster but cannot see or interact with the browser manually.
+                                    </div>
+                                  </label>
+                                  <div className="settings-field">
+                                    <span>Agent Profile</span>
+                                    <div className="tool-folder-picker-row">
+                                      {isLoadingBrowserChromeProfile ? (
+                                        <span>Loading...</span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="settings-add-btn"
+                                          onClick={() => void handleLaunchBrowserChrome()}
+                                          disabled={isLaunchingBrowserChrome}
+                                        >
+                                          {isLaunchingBrowserChrome ? 'Opening...' : (browserChromeProfile?.exists ? 'Open Agent Profile' : 'Create & Open Agent Profile')}
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="settings-help" style={{ marginTop: '8px' }}>
+                                      Opens a new Chrome window with the agent profile as a separate "person".
+                                      You can have both your main profile and agent profile open at the same time.
+                                      Log in to websites in the agent window - the agent will use these sessions.
+                                    </div>
+                                    {browserChromeProfile?.exists ? (
+                                      <div className="settings-help" style={{ marginTop: '8px' }}>
+                                        <div>Profile exists at: <code>~/Library/Application Support/Google/Chrome/AgentProfile</code></div>
+                                        {browserChromeProfile.lastUsed && (
+                                          <div>Last modified: {new Date(browserChromeProfile.lastUsed).toLocaleString()}</div>
+                                        )}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </details>
                             ) : null}
                           </div>
-                        </div>
-                      </details>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="settings-panel">

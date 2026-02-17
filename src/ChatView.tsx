@@ -35,6 +35,16 @@ function routedTargetLabel(session: Session | null): string {
   return model ? `${provider} / ${model}` : provider;
 }
 
+function formatTokenCount(tokens: number | null | undefined): string {
+  if (tokens === null || tokens === undefined || tokens === 0) {
+    return '0';
+  }
+  return new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(tokens);
+}
+
 function isTerminalSessionStatus(status: string): boolean {
   const normalized = status.trim().toLowerCase();
   return normalized === 'completed' || normalized === 'failed';
@@ -429,6 +439,18 @@ function ChatView() {
                 {session.provider === 'automatic_router' && routedTarget ? (
                   <span className="session-provider-chip session-routed-chip" title={`Routed target: ${routedTarget}`}>
                     Routed to {routedTarget}
+                  </span>
+                ) : null}
+                {(session.input_tokens ?? 0) > 0 || (session.output_tokens ?? 0) > 0 ? (
+                  <span 
+                    className="session-token-stats-chip" 
+                    title={`Input: ${formatTokenCount(session.input_tokens)} tokens, Output: ${formatTokenCount(session.output_tokens)} tokens, Total: ${formatTokenCount(session.total_tokens)} tokens`}
+                  >
+                    <span className="token-stat">↑{formatTokenCount(session.input_tokens)}</span>
+                    <span className="token-stat-separator">|</span>
+                    <span className="token-stat">↓{formatTokenCount(session.output_tokens)}</span>
+                    <span className="token-stat-separator">|</span>
+                    <span className="token-stat token-stat-total">Σ{formatTokenCount(session.total_tokens)}</span>
                   </span>
                 ) : null}
               </div>

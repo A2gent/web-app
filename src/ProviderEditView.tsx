@@ -6,6 +6,7 @@ import {
   listKimiModels,
   listLMStudioModels,
   listOpenAIModels,
+  listOpenRouterModels,
   listProviders,
   setActiveProvider,
   updateProvider,
@@ -23,7 +24,7 @@ function isFallbackProvider(type?: string): boolean {
 }
 
 function isModelQueryableProvider(type: LLMProviderType): boolean {
-  return type === 'lmstudio' || type === 'kimi' || type === 'google' || type === 'openai';
+  return type === 'lmstudio' || type === 'kimi' || type === 'google' || type === 'openai' || type === 'openrouter';
 }
 
 function ProviderEditView() {
@@ -70,6 +71,7 @@ function ProviderEditView() {
   const isKimi = selected?.type === 'kimi';
   const isGoogle = selected?.type === 'google';
   const isOpenAI = selected?.type === 'openai';
+  const isOpenRouter = selected?.type === 'openrouter';
   const isFallback = isFallbackProvider(selected?.type);
   const isNamedFallbackAggregate = selected?.type ? selected.type.startsWith('fallback_chain:') : false;
 
@@ -102,12 +104,14 @@ function ProviderEditView() {
         (await listGoogleModels(provider.base_url)).forEach((name) => options.add(name));
       } else if (provider.type === 'openai') {
         (await listOpenAIModels(provider.base_url)).forEach((name) => options.add(name));
+      } else if (provider.type === 'openrouter') {
+        (await listOpenRouterModels(provider.base_url)).forEach((name) => options.add(name));
       }
     } catch {
       // Keep saved/default options when model querying fails.
     }
 
-    return Array.from(options);
+    return Array.from(options).sort((a, b) => a.localeCompare(b));
   };
 
   const loadProviders = async () => {
@@ -475,6 +479,14 @@ function ProviderEditView() {
                   </a>
                   .
                 </span>
+              ) : isOpenRouter ? (
+                <span className="thinking-note">
+                  Get an API key from{' '}
+                  <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer noopener">
+                    openrouter.ai/settings/keys
+                  </a>
+                  .
+                </span>
               ) : null}
             </label>
           ) : null}
@@ -486,7 +498,7 @@ function ProviderEditView() {
             </label>
           ) : null}
 
-          {(isLMStudio || isKimi || isGoogle || isOpenAI) && !isFallback && !isAutomaticRouter ? (
+          {(isLMStudio || isKimi || isGoogle || isOpenAI || isOpenRouter) && !isFallback && !isAutomaticRouter ? (
             <div className="settings-field">
               <span>Default model</span>
               <div className="provider-model-query-row">
@@ -498,7 +510,9 @@ function ProviderEditView() {
                         ? 'Select a loaded Gemini model'
                         : isOpenAI
                           ? 'Select an OpenAI model'
-                          : 'Select a loaded Kimi model'}
+                          : isOpenRouter
+                            ? 'Select an OpenRouter model'
+                            : 'Select a loaded Kimi model'}
                   </option>
                   {model.trim() !== '' && !availableModels.includes(model) ? (
                     <option value={model}>{model}</option>

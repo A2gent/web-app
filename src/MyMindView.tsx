@@ -43,6 +43,8 @@ const DEFAULT_TREE_PANEL_WIDTH = 360;
 const MIN_TREE_PANEL_WIDTH = 240;
 const MAX_TREE_PANEL_WIDTH = 720;
 const TREE_PANEL_WIDTH_STORAGE_KEY = 'a2gent.mind.tree.width';
+const EXPANDED_DIRS_STORAGE_KEY = 'a2gent.mind.expandedDirs';
+const SELECTED_FILE_STORAGE_KEY = 'a2gent.mind.selectedFile';
 const SESSION_POLL_INTERVAL_MS = 4000;
 
 function isTerminalSessionStatus(status: string): boolean {
@@ -57,6 +59,51 @@ function readStoredTreePanelWidth(): number {
     return DEFAULT_TREE_PANEL_WIDTH;
   }
   return Math.min(MAX_TREE_PANEL_WIDTH, Math.max(MIN_TREE_PANEL_WIDTH, parsed));
+}
+
+function readStoredExpandedDirs(): Set<string> {
+  try {
+    const raw = localStorage.getItem(EXPANDED_DIRS_STORAGE_KEY);
+    if (!raw) {
+      return new Set<string>(['']);
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return new Set<string>(parsed);
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return new Set<string>(['']);
+}
+
+function writeStoredExpandedDirs(dirs: Set<string>): void {
+  try {
+    localStorage.setItem(EXPANDED_DIRS_STORAGE_KEY, JSON.stringify(Array.from(dirs)));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function readStoredSelectedFile(): string {
+  try {
+    const raw = localStorage.getItem(SELECTED_FILE_STORAGE_KEY);
+    return raw || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredSelectedFile(path: string): void {
+  try {
+    if (path) {
+      localStorage.setItem(SELECTED_FILE_STORAGE_KEY, path);
+    } else {
+      localStorage.removeItem(SELECTED_FILE_STORAGE_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
 }
 
 function isExternalLink(href: string): boolean {
@@ -362,10 +409,10 @@ function MyMindView() {
   const [isLoadingBrowse, setIsLoadingBrowse] = useState(false);
 
   const [treeEntries, setTreeEntries] = useState<Record<string, MindTreeEntry[]>>({});
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => new Set<string>(['']));
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(readStoredExpandedDirs);
   const [loadingDirs, setLoadingDirs] = useState<Set<string>>(() => new Set<string>());
 
-  const [selectedFilePath, setSelectedFilePath] = useState('');
+  const [selectedFilePath, setSelectedFilePath] = useState(readStoredSelectedFile);
   const [selectedFileContent, setSelectedFileContent] = useState('');
   const [savedFileContent, setSavedFileContent] = useState('');
   const [isLoadingFile, setIsLoadingFile] = useState(false);
@@ -422,6 +469,13 @@ function MyMindView() {
     setSelectedFileContent('');
     setSavedFileContent('');
     setMarkdownMode('preview');
+    // Clear stored state when root folder changes
+    try {
+      localStorage.removeItem(EXPANDED_DIRS_STORAGE_KEY);
+      localStorage.removeItem(SELECTED_FILE_STORAGE_KEY);
+    } catch {
+      // ignore storage errors
+    }
   }, []);
 
   const loadConfig = useCallback(async () => {
@@ -431,9 +485,40 @@ function MyMindView() {
       const response = await getMindConfig();
       const configuredRoot = response.root_folder || '';
       setRootFolder(configuredRoot);
-      resetTreeState();
+
       if (configuredRoot !== '') {
+        // Load stored state before resetting
+        const storedExpanded = readStoredExpandedDirs();
+        const storedFile = readStoredSelectedFile();
+
+        resetTreeState();
         await loadTree('');
+
+        // Restore expanded directories - load tree for each
+        const expandedArray = Array.from(storedExpanded).filter((p) => p !== '');
+        if (expandedArray.length > 0) {
+          setExpandedDirs(storedExpanded);
+          // Load tree data for all expanded directories
+          await Promise.all(expandedArray.map((path) => loadTree(path)));
+        }
+
+        // Restore selected file if it exists
+        if (storedFile) {
+          setSelectedFilePath(storedFile);
+          try {
+            const fileResponse = await getMindFile(storedFile);
+            setSelectedFileContent(fileResponse.content || '');
+            setSavedFileContent(fileResponse.content || '');
+          } catch (fileError) {
+            // File might not exist anymore, clear it
+            setSelectedFilePath('');
+            setSelectedFileContent('');
+            setSavedFileContent('');
+            writeStoredSelectedFile('');
+          }
+        }
+      } else {
+        resetTreeState();
       }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load My Mind configuration');
@@ -484,6 +569,14 @@ function MyMindView() {
   useEffect(() => {
     localStorage.setItem(TREE_PANEL_WIDTH_STORAGE_KEY, String(treePanelWidth));
   }, [treePanelWidth]);
+
+  useEffect(() => {
+    writeStoredExpandedDirs(expandedDirs);
+  }, [expandedDirs]);
+
+  useEffect(() => {
+    writeStoredSelectedFile(selectedFilePath);
+  }, [selectedFilePath]);
 
   useEffect(() => {
     setIsFileActionsMenuOpen(false);

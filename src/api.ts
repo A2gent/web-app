@@ -119,6 +119,8 @@ export interface Session {
   title: string;
   status: string;
   total_tokens?: number;
+  input_tokens?: number;
+  output_tokens?: number;
   run_duration_seconds?: number;
   created_at: string;
   updated_at: string;
@@ -1238,6 +1240,21 @@ export async function listOpenAIModels(baseURL?: string): Promise<string[]> {
   const response = await fetch(url.toString());
   if (!response.ok) {
     throw await buildApiError(response, 'Failed to load OpenAI models');
+  }
+  const data: ProviderModelsResponse = await response.json();
+  return data.models || [];
+}
+
+export async function listOpenRouterModels(baseURL?: string): Promise<string[]> {
+  const url = new URL(`${getApiBaseUrl()}/providers/openrouter/models`);
+  const normalizedBaseURL = normalizeLMStudioBaseUrl(baseURL);
+  if (normalizedBaseURL) {
+    url.searchParams.set('base_url', normalizedBaseURL);
+  }
+
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to load OpenRouter models');
   }
   const data: ProviderModelsResponse = await response.json();
   return data.models || [];

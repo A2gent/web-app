@@ -708,6 +708,32 @@ body.mind-resizing * {
   color: #9ce7be;
 }
 
+.session-token-stats-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(255, 152, 0, 0.15);
+  color: #ffcc80;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  gap: 4px;
+}
+
+.token-stat {
+  display: inline-flex;
+  align-items: center;
+}
+
+.token-stat-separator {
+  opacity: 0.5;
+  margin: 0 2px;
+}
+
+.token-stat-total {
+  font-weight: 500;
+}
+
 .session-status {
   font-size: 12px;
   padding: 2px 8px;
@@ -1514,17 +1540,18 @@ body.mind-resizing * {
 }
 
 .nav-item {
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .nav-link {
   display: block;
-  padding: 12px 16px;
+  padding: 6px 10px 6px 14px;
   color: #ccc;
   text-decoration: none;
-  border-radius: 6px;
-  transition: all 0.2s;
+  border-radius: 4px;
+  transition: all 0.15s;
   font-weight: 500;
+  font-size: 15px;
 }
 
 .nav-link:hover {
@@ -1535,6 +1562,112 @@ body.mind-resizing * {
 .nav-link.active {
   background-color: #333;
   color: #646cff;
+}
+
+.nav-section {
+  margin-bottom: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #333;
+}
+
+.nav-section:last-child {
+  border-bottom: none;
+}
+
+.nav-section-header {
+  padding: 4px 12px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 1px;
+}
+
+.nav-section:first-child .nav-section-header {
+  color: #7c9a6a;
+}
+
+.nav-section:nth-child(2) .nav-section-header {
+  color: #8a8ac8;
+}
+
+.nav-section:nth-child(3) .nav-section-header {
+  color: #c9a35c;
+}
+
+/* Sidebar Projects */
+.sidebar-add-project-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 0;
+  margin-top: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  font-size: 12px;
+  transition: color 0.15s;
+}
+
+.sidebar-add-project-btn:hover {
+  color: #999;
+}
+
+.sidebar-add-project-line {
+  flex: 1;
+  height: 1px;
+  background-color: #333;
+  min-width: 8px;
+}
+
+.sidebar-add-project-label {
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.sidebar-create-project-form {
+  padding: 8px 12px;
+  margin-top: 4px;
+}
+
+.sidebar-project-input {
+  width: 100%;
+  padding: 6px 8px;
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.sidebar-project-input:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+.sidebar-project-create-btn {
+  width: 100%;
+  padding: 6px 12px;
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sidebar-project-create-btn:hover:not(:disabled) {
+  background-color: #333;
+  border-color: #555;
+}
+
+.sidebar-project-create-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 900px) {
@@ -5117,4 +5250,62 @@ input[type="checkbox"]:disabled {
     align-items: flex-start;
     gap: 8px;
   }
+}
+
+/* Skills category grouping styles */
+.skills-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.skill-category-section {
+  border: 1px solid #2f3846;
+  border-radius: 10px;
+  background: #151922;
+  overflow: hidden;
+}
+
+.skill-category-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #1b1f26;
+  border-bottom: 1px solid #2f3846;
+}
+
+.skill-category-icon {
+  font-size: 22px;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.skill-category-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skill-category-title h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #d8deea;
+}
+
+.skill-category-description {
+  margin: 0;
+  font-size: 12px;
+  color: #95a1b2;
+}
+
+.skill-category-section .skills-grid {
+  padding: 12px;
+  background: transparent;
+}
+
+/* Adjust skill card styling within categories */
+.skill-category-section .skill-card {
+  background: #1b1f26;
 }

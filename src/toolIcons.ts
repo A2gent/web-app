@@ -18,7 +18,117 @@ const TOOL_ICONS_BY_NAME: Record<string, string> = {
   piper_tts: '🔊',
   notify_webapp: '🔔',
   telegram_send_message: '✉️',
+  whisper_stt: '🎤',
   browser_chrome: '🧭',
+  mcp_manage: '🔌',
+  fetch_url: '📡',
+  exa_search: '🔬',
+};
+
+// Tool categories for grouping in the UI
+export type ToolCategory =
+  | 'file-system'
+  | 'multimedia'
+  | 'web-network'
+  | 'system'
+  | 'task-management'
+  | 'notifications'
+  | 'search-external'
+  | 'mcp'
+  | 'other';
+
+export interface CategoryInfo {
+  id: ToolCategory;
+  label: string;
+  icon: string;
+  description: string;
+}
+
+export const TOOL_CATEGORIES: CategoryInfo[] = [
+  {
+    id: 'file-system',
+    label: 'File System',
+    icon: '📁',
+    description: 'Read, write, and manipulate files and directories',
+  },
+  {
+    id: 'multimedia',
+    label: 'Multimedia',
+    icon: '🎬',
+    description: 'Audio, video, images, screenshots, and speech',
+  },
+  {
+    id: 'web-network',
+    label: 'Web & Network',
+    icon: '🌐',
+    description: 'Browser automation and web requests',
+  },
+  {
+    id: 'system',
+    label: 'System',
+    icon: '⚙️',
+    description: 'Shell commands and system operations',
+  },
+  {
+    id: 'task-management',
+    label: 'Task Management',
+    icon: '📋',
+    description: 'Recurring jobs and task delegation',
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: '🔔',
+    description: 'Web and messaging notifications',
+  },
+  {
+    id: 'search-external',
+    label: 'Search & External',
+    icon: '🔍',
+    description: 'Search engines and external services',
+  },
+  {
+    id: 'mcp',
+    label: 'MCP Servers',
+    icon: '🔌',
+    description: 'Model Context Protocol server management',
+  },
+];
+
+// Mapping of tool names to their categories
+const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
+  // File System
+  read: 'file-system',
+  write: 'file-system',
+  edit: 'file-system',
+  replace_lines: 'file-system',
+  glob: 'file-system',
+  find_files: 'file-system',
+  grep: 'file-system',
+  // Multimedia
+  take_screenshot_tool: 'multimedia',
+  take_camera_photo_tool: 'multimedia',
+  whisper_stt: 'multimedia',
+  piper_tts: 'multimedia',
+  macos_say_tts: 'multimedia',
+  elevenlabs_tts: 'multimedia',
+  // Web & Network
+  browser_chrome: 'web-network',
+  fetch_url: 'web-network',
+  // System
+  bash: 'system',
+  // Task Management
+  recurring_jobs_tool: 'task-management',
+  task: 'task-management',
+  // Notifications
+  notify_webapp: 'notifications',
+  telegram_send_message: 'notifications',
+  // Search & External
+  brave_search_query: 'search-external',
+  exa_search: 'search-external',
+  google_calendar_query: 'search-external',
+  // MCP
+  mcp_manage: 'mcp',
 };
 
 export function toolIconForName(toolName: string): string {
@@ -27,4 +137,13 @@ export function toolIconForName(toolName: string): string {
     return '🧰';
   }
   return TOOL_ICONS_BY_NAME[normalized] || '🧰';
+}
+
+export function getToolCategory(toolName: string): ToolCategory {
+  const normalized = toolName.trim().toLowerCase();
+  return TOOL_CATEGORY_MAP[normalized] || 'other';
+}
+
+export function getCategoryInfo(categoryId: ToolCategory): CategoryInfo | undefined {
+  return TOOL_CATEGORIES.find((cat) => cat.id === categoryId);
 }
