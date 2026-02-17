@@ -149,7 +149,6 @@ function ChatView() {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<LLMProviderType | ''>('');
   const [activeRequestSessionId, setActiveRequestSessionId] = useState<string | null>(null);
-  const [showSystemPromptDetails, setShowSystemPromptDetails] = useState(false);
   const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
   const queuedMessagesRef = useRef<string[]>([]);
   const activeStreamAbortRef = useRef<AbortController | null>(null);
@@ -163,12 +162,7 @@ function ChatView() {
     [session, error],
   );
   const systemPromptSnapshot = session?.system_prompt_snapshot;
-  const hasSystemPromptBlocks = (systemPromptSnapshot?.blocks?.length || 0) > 0;
   const routedTarget = useMemo(() => routedTargetLabel(session), [session]);
-
-  useEffect(() => {
-    setShowSystemPromptDetails(false);
-  }, [session?.id]);
 
   useEffect(() => {
     if (activeSessionId) {
@@ -459,46 +453,6 @@ function ChatView() {
                   Failure reason: {sessionFailureReason}
                 </div>
               ) : null}
-              {systemPromptSnapshot ? (
-                <div className="session-system-prompt-row">
-                  <button
-                    type="button"
-                    className={`session-system-prompt-pill${showSystemPromptDetails ? ' open' : ''}`}
-                    onClick={() => setShowSystemPromptDetails((prev) => !prev)}
-                    title="View the exact system prompt snapshot used for this session"
-                  >
-                    {hasSystemPromptBlocks ? 'System prompt used' : 'Default system prompt'}
-                  </button>
-                  {showSystemPromptDetails ? (
-                    <div className="session-system-prompt-panel">
-                      <div className="session-system-prompt-summary">
-                        {hasSystemPromptBlocks
-                          ? `${systemPromptSnapshot.blocks.length} instruction block(s) captured for this session.`
-                          : 'No custom instruction blocks were captured for this session.'}
-                      </div>
-                      {systemPromptSnapshot.blocks.length > 0 ? (
-                        <div className="session-system-prompt-blocks">
-                          {systemPromptSnapshot.blocks.map((block, index) => (
-                            <div className="session-system-prompt-block" key={`session-prompt-block-${index}`}>
-                              <div className="session-system-prompt-block-header">
-                                #{index + 1} {block.type || 'text'} {block.enabled ? '' : '(disabled)'}
-                              </div>
-                              {block.value ? <div className="session-system-prompt-block-meta">Configured value: {block.value}</div> : null}
-                              {block.source_path ? <div className="session-system-prompt-block-meta">Source file: {block.source_path}</div> : null}
-                              {block.error ? <div className="session-system-prompt-block-error">Error: {block.error}</div> : null}
-                              {block.resolved_content ? <pre className="session-system-prompt-block-content">{block.resolved_content}</pre> : null}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                      <details className="session-system-prompt-full">
-                        <summary>Full composed system prompt</summary>
-                        <pre className="session-system-prompt-full-content">{systemPromptSnapshot.combined_prompt}</pre>
-                      </details>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
               </div>
             </>
           ) : (
@@ -515,8 +469,13 @@ function ChatView() {
       )}
       
       <div className="chat-history">
-        {messages.length > 0 ? (
-          <MessageList messages={messages} isLoading={isLoading} sessionId={session?.id || null} />
+        {messages.length > 0 || systemPromptSnapshot ? (
+          <MessageList 
+            messages={messages} 
+            isLoading={isLoading} 
+            sessionId={session?.id || null}
+            systemPromptSnapshot={systemPromptSnapshot}
+          />
         ) : (
           <div className="empty-state">
             <h2>Start a Conversation</h2>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { buildImageAssetUrl, type Message, type ToolCall, type ToolResult } from './api';
+import { buildImageAssetUrl, type Message, type SystemPromptSnapshot, type ToolCall, type ToolResult } from './api';
 import { IntegrationProviderIcon, integrationProviderForToolName, integrationProviderLabel } from './integrationMeta';
 import { renderMarkdownToHtml } from './markdown';
 import { buildOpenInMyMindUrl, extractToolFilePath, isSupportedFileTool } from './myMindNavigation';
@@ -8,11 +8,13 @@ import { readImagePreviewEvent, readWebAppNotification } from './toolResultEvent
 import { toolIconForName } from './toolIcons';
 import { ToolIcon } from './ToolIcon';
 import { emitWebAppNotification } from './webappNotifications';
+import SystemPromptMessage from './SystemPromptMessage';
 
 interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
   sessionId: string | null;
+  systemPromptSnapshot?: SystemPromptSnapshot | null;
 }
 
 interface EditToolInput {
@@ -31,7 +33,7 @@ interface DiffRow {
 
 const DIFF_CONTEXT_LINES = 3;
 
-const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionId }) => {
+const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionId, systemPromptSnapshot }) => {
   const parseEditToolInput = (input: Record<string, unknown>): EditToolInput | null => {
     const path = input.path;
     const oldString = input.old_string;
@@ -531,6 +533,8 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
 
   return (
     <div className="message-list">
+      <SystemPromptMessage systemPromptSnapshot={systemPromptSnapshot} />
+      
       {renderedMessages}
 
       {isLoading && (
