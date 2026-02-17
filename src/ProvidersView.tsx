@@ -113,12 +113,6 @@ function ProvidersView() {
       )}
 
       <div className="page-content page-content-narrow provider-list-view">
-        <div className="settings-actions">
-          <Link to="/providers/fallback-aggregates/new" className="settings-add-btn">
-            New fallback aggregate
-          </Link>
-        </div>
-
         <h3>Automatic Router</h3>
         <p className="thinking-note">
           Automatic router is for intent-based model selection: a lightweight router model reads the prompt and your plain-text mapping rules,
@@ -208,6 +202,12 @@ function ProvidersView() {
         })}
 
         <h3>Fallback Chains</h3>
+        <div className="settings-actions">
+          <Link to="/providers/fallback-aggregates/new" className="settings-add-btn">
+          New chain
+          </Link>
+        </div>
+
         <p className="thinking-note">
           Fallback chains improve reliability and continuity: if one provider/model fails (rate limit, outage, auth, or transient errors),
           the run automatically continues on the next model in the chain without manual intervention.
