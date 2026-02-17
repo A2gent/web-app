@@ -3863,6 +3863,12 @@ body.mind-resizing * {
   cursor: not-allowed;
 }
 
+.skill-install-btn.installed {
+  background: rgba(62, 128, 85, 0.3);
+  border-color: #5a9c73;
+  color: #a8f0bb;
+}
+
 .ios-switch {
   width: 50px;
   height: 30px;

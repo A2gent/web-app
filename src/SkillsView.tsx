@@ -57,6 +57,7 @@ function SkillsView() {
   const [searchResults, setSearchResults] = useState<RegistrySkill[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [installingSkills, setInstallingSkills] = useState<Set<string>>(new Set());
+  const [installedSkills, setInstalledSkills] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<'installsCurrent' | 'stars'>('installsCurrent');
 
   const loadSettings = async () => {
@@ -185,12 +186,12 @@ function SkillsView() {
     }
 
     setInstallingSkills(prev => new Set(prev).add(skill.id));
-    setError(null);
-    setSuccess(null);
 
     try {
-      const response = await installRegistrySkill(skill.id);
-      setSuccess(response.message);
+      await installRegistrySkill(skill.id);
+      
+      // Mark as installed
+      setInstalledSkills(prev => new Set(prev).add(skill.id));
       
       // Refresh discovered skills after installation
       if (connectedFolder) {
@@ -398,11 +399,15 @@ function SkillsView() {
                           )}
                           <button
                             type="button"
-                            className="skill-install-btn"
+                            className={installedSkills.has(skill.id) ? 'skill-install-btn installed' : 'skill-install-btn'}
                             onClick={() => void handleInstall(skill)}
-                            disabled={installingSkills.has(skill.id)}
+                            disabled={installingSkills.has(skill.id) || installedSkills.has(skill.id)}
                           >
-                            {installingSkills.has(skill.id) ? 'Installing...' : '📥 Install'}
+                            {installingSkills.has(skill.id) 
+                              ? '⏳ Installing...' 
+                              : installedSkills.has(skill.id)
+                              ? '✅ Installed'
+                              : '📥 Install'}
                           </button>
                         </div>
                       ))}
