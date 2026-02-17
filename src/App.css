@@ -635,7 +635,7 @@ body.mind-resizing * {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
-  margin-left: 26px; /* Отступ для кружка (16px + 10px отступ) */
+  margin-left: 22px; /* Отступ для кружка (16px + 6px отступ) */
 }
 
 .session-meta-row {
@@ -1977,7 +1977,7 @@ body.mind-resizing * {
   position: absolute;
   left: 0;
   top: 50%;
-  transform: translateY(-50%); /* Центрируем вертикально */
+  margin-top: -8px; /* Центрируем вертикально (половина высоты) */
   z-index: 1; /* Над остальным контентом */
 }
 
