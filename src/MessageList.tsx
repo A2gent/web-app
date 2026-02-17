@@ -406,6 +406,16 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
         continue;
       }
 
+      // Skip empty assistant messages (tool-only responses without text content)
+      if (message.role === 'assistant' && !message.content?.trim() && !isCompactionMessage(message)) {
+        continue;
+      }
+
+      // Skip synthetic continuation messages (auto-generated after compaction)
+      if (isSyntheticContinuation(message)) {
+        continue;
+      }
+
       nodes.push(
         <div
           key={index}
@@ -469,4 +479,8 @@ const isCompactionMessage = (message: Message): boolean => {
     return marker.trim().toLowerCase() === 'true';
   }
   return false;
+};
+
+const isSyntheticContinuation = (message: Message): boolean => {
+  return message.metadata?.synthetic_continuation === true;
 };
