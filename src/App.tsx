@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import SessionsList from './SessionsList';
 import JobsList from './JobsList';
 import JobEdit from './JobEdit';
 import JobDetail from './JobDetail';
@@ -13,12 +12,13 @@ import ProviderEditView from './ProviderEditView';
 import ProvidersView from './ProvidersView';
 import FallbackAggregateCreateView from './FallbackAggregateCreateView';
 import SettingsView from './SettingsView';
-import MyMindView from './MyMindView';
+import ProjectView from './ProjectView';
 import ThinkingView from './ThinkingView';
 import SkillsView from './SkillsView';
 import ToolsView from './ToolsView';
 import { buildImageAssetUrl, fetchSpeechClip, getAppTitle, getSession, listSessions, setAppTitle as persistAppTitle } from './api';
 import { THINKING_PROJECT_ID } from './thinking';
+import { SYSTEM_PROJECT_KB_ID, SYSTEM_PROJECT_AGENT_ID } from './Sidebar';
 import { readWebAppNotification } from './toolResultEvents';
 import { webAppNotificationEventName, type WebAppNotificationEventDetail } from './webappNotifications';
 import './App.css';
@@ -75,23 +75,6 @@ function activeChatSessionIdFromPath(pathname: string): string | null {
     return null;
   }
   return decodeURIComponent(match[1]);
-}
-
-// Wrapper component to use navigate hook
-function SessionsListWrapper() {
-  const navigate = useNavigate();
-
-  const handleSelectSession = (sessionId: string, initialMessage?: string) => {
-    navigate(`/chat/${sessionId}`, {
-      state: initialMessage ? { initialMessage } : undefined,
-    });
-  };
-
-  return (
-    <SessionsList
-      onSelectSession={handleSelectSession}
-    />
-  );
 }
 
 function AppLayout() {
@@ -694,9 +677,11 @@ function AppLayout() {
 
       <div className="main-content">
         <Routes>
-          <Route path="/" element={<Navigate to="/sessions" replace />} />
-          <Route path="/sessions" element={<SessionsListWrapper />} />
-          <Route path="/agent/sessions" element={<Navigate to="/sessions" replace />} />
+          <Route path="/" element={<Navigate to={`/projects/${SYSTEM_PROJECT_KB_ID}`} replace />} />
+          {/* Legacy routes - redirect to project routes */}
+          <Route path="/sessions" element={<Navigate to={`/projects/${SYSTEM_PROJECT_KB_ID}`} replace />} />
+          <Route path="/agent/sessions" element={<Navigate to={`/projects/${SYSTEM_PROJECT_AGENT_ID}`} replace />} />
+          <Route path="/my-mind" element={<Navigate to={`/projects/${SYSTEM_PROJECT_KB_ID}`} replace />} />
           <Route path="/chat/:sessionId?" element={<ChatView />} />
           <Route path="/agent/jobs" element={<JobsList />} />
           <Route path="/agent/jobs/new" element={<JobEdit />} />
@@ -704,7 +689,6 @@ function AppLayout() {
           <Route path="/agent/jobs/:jobId" element={<JobDetail />} />
           <Route path="/integrations" element={<IntegrationsView />} />
           <Route path="/mcp" element={<MCPServersView />} />
-          <Route path="/my-mind" element={<MyMindView />} />
           <Route path="/thinking" element={<ThinkingView />} />
           <Route path="/providers" element={<ProvidersView />} />
           <Route path="/providers/fallback-aggregates/new" element={<FallbackAggregateCreateView />} />
@@ -712,6 +696,7 @@ function AppLayout() {
           <Route path="/tools" element={<ToolsView />} />
           <Route path="/skills" element={<SkillsView />} />
           <Route path="/settings" element={<SettingsView />} />
+          <Route path="/projects/:projectId" element={<ProjectView />} />
         </Routes>
       </div>
     </div>

@@ -872,27 +872,23 @@ function MyMindView() {
 
   const ensureMyMindProject = useCallback(async (): Promise<string> => {
     const projectName = 'My Mind';
-    const expectedFolders = rootFolder.trim() ? [rootFolder.trim()] : [];
+    const expectedFolder = rootFolder.trim() || undefined;
 
     const projects = await listProjects();
     const existing = projects.find((project) => project.name.trim().toLowerCase() === projectName.toLowerCase());
 
     if (existing) {
-      const existingFolders = [...(existing.folders || [])].sort();
-      const nextFolders = [...expectedFolders].sort();
-      const needsFolderSync =
-        existingFolders.length !== nextFolders.length ||
-        existingFolders.some((value, index) => value !== nextFolders[index]);
+      const needsFolderSync = existing.folder !== expectedFolder;
 
       if (needsFolderSync) {
-        await updateProject(existing.id, { folders: expectedFolders });
+        await updateProject(existing.id, { folder: expectedFolder });
       }
       return existing.id;
     }
 
     const created = await createProject({
       name: projectName,
-      folders: expectedFolders,
+      folder: expectedFolder,
     });
     return created.id;
   }, [rootFolder]);

@@ -209,19 +209,20 @@ export interface CreateSessionResponse {
 export interface Project {
   id: string;
   name: string;
-  folders: string[];
+  folder?: string;
+  is_system: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface CreateProjectRequest {
   name: string;
-  folders: string[];
+  folder?: string;
 }
 
 export interface UpdateProjectRequest {
   name?: string;
-  folders?: string[];
+  folder?: string;
 }
 
 export interface SettingsResponse {

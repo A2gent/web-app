@@ -24,20 +24,15 @@ interface NavSection {
   items: NavItem[];
 }
 
+// System project IDs - must match backend
+export const SYSTEM_PROJECT_KB_ID = 'system-kb';
+export const SYSTEM_PROJECT_AGENT_ID = 'system-agent';
+
 const navSections: NavSection[] = [
-  {
-    id: 'user',
-    label: '🧠 Knowledge Base',
-    items: [
-      { id: 'kb-sessions', label: '💬 Sessions', path: '/sessions' },
-      { id: 'kb-files', label: '📁 Files', path: '/my-mind' },
-    ],
-  },
   {
     id: 'agent',
     label: '🤖 Agent',
     items: [
-      { id: 'agent-sessions', label: '💬 Sessions', path: '/agent/sessions' },
       { id: 'thinking', label: '🤔 Thinking', path: '/thinking' },
       { id: 'jobs', label: '🗓️ Recurring jobs', path: '/agent/jobs' },
       { id: 'tools', label: '🧰 Tools', path: '/tools' },
@@ -104,7 +99,7 @@ function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
 
     setIsCreatingProject(true);
     try {
-      await createProject({ name, folders: [] });
+      await createProject({ name });
       setNewProjectName('');
       setIsCreateProjectOpen(false);
       await loadProjects();
@@ -113,6 +108,13 @@ function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
     } finally {
       setIsCreatingProject(false);
     }
+  };
+
+  // Helper to get project icon based on system status
+  const getProjectIcon = (project: Project) => {
+    if (project.id === SYSTEM_PROJECT_KB_ID) return '🧠';
+    if (project.id === SYSTEM_PROJECT_AGENT_ID) return '🤖';
+    return '📁';
   };
 
   return (
@@ -149,25 +151,6 @@ function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
       </div>
 
       <nav className="sidebar-nav">
-        {navSections.map(section => (
-          <div key={section.id} className="nav-section">
-            <div className="nav-section-header">{section.label}</div>
-            <ul className="nav-list">
-              {section.items.map(item => (
-                <li key={item.id} className="nav-item">
-                  <Link
-                    to={item.path}
-                    className={`nav-link ${location.pathname.startsWith(item.path) ? 'active' : ''}`}
-                    onClick={onNavigate}
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-
         {/* Projects Section */}
         <div className="nav-section">
           <div className="nav-section-header">📂 Projects</div>
@@ -179,7 +162,7 @@ function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
                   className={`nav-link ${location.pathname.startsWith(`/projects/${project.id}`) ? 'active' : ''}`}
                   onClick={onNavigate}
                 >
-                  {project.name}
+                  {getProjectIcon(project)} {project.name}
                 </Link>
               </li>
             ))}
@@ -226,6 +209,26 @@ function Sidebar({ title, onTitleChange, onNavigate }: SidebarProps) {
             </div>
           )}
         </div>
+
+        {/* Agent/Settings Sections */}
+        {navSections.map(section => (
+          <div key={section.id} className="nav-section">
+            <div className="nav-section-header">{section.label}</div>
+            <ul className="nav-list">
+              {section.items.map(item => (
+                <li key={item.id} className="nav-item">
+                  <Link
+                    to={item.path}
+                    className={`nav-link ${location.pathname.startsWith(item.path) ? 'active' : ''}`}
+                    onClick={onNavigate}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </nav>
     </div>
   );
