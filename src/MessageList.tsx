@@ -157,6 +157,8 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
   const endRef = useRef<HTMLDivElement>(null);
   const emittedNotificationIDsRef = useRef<Set<string>>(new Set());
   const hasBaselineHydratedRef = useRef(false);
+  const previousMessagesLength = useRef<number>(0);
+  const shouldAutoScroll = useRef<boolean>(true);
 
   const resolveImageUrl = (result: ToolResult | undefined): string => {
     if (!result) {
@@ -186,13 +188,48 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
     return sourceTool === 'take_camera_photo_tool' || sourceTool === 'take_screenshot_tool';
   };
 
+  // Check if user is at the bottom of the scrollable container
+  const isUserAtBottom = (): boolean => {
+    // Find the scrollable parent container (.mind-session-inline-body)
+    let container = endRef.current?.parentElement;
+    while (container && !container.classList.contains('mind-session-inline-body')) {
+      container = container.parentElement;
+    }
+    
+    if (!container) return true;
+    
+    const threshold = 50; // pixels from bottom
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    return scrollHeight - scrollTop - clientHeight < threshold;
+  };
+
+  // Smart auto-scroll: only auto-scroll when appropriate
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const currentMessagesLength = messages.length;
+    const hasNewMessage = currentMessagesLength > previousMessagesLength.current;
+    
+    // If messages array length changed, it might be a new message or just polling updates
+    if (hasNewMessage) {
+      // Only auto-scroll if the user is at the bottom or if this is the first load
+      if (shouldAutoScroll.current && (isUserAtBottom() || previousMessagesLength.current === 0)) {
+        // Small delay to ensure DOM is updated before scrolling
+        setTimeout(() => {
+          endRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 0);
+      }
+    } else if (currentMessagesLength === previousMessagesLength.current) {
+      // Same length - likely just polling updates, don't auto-scroll
+      // This prevents the forced scrolling during task progress updates
+    }
+    
+    previousMessagesLength.current = currentMessagesLength;
   }, [messages]);
 
   useEffect(() => {
     emittedNotificationIDsRef.current.clear();
     hasBaselineHydratedRef.current = false;
+    previousMessagesLength.current = 0;
+    shouldAutoScroll.current = true;
   }, [sessionId]);
 
   useEffect(() => {
@@ -452,6 +489,45 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
 
     return nodes;
   }, [messages]);
+
+  // Set up scroll event listener on the scrollable container to track user scroll position
+  useEffect(() => {
+    let container: Element | null = null;
+    
+    // Find the scrollable parent container (.mind-session-inline-body)
+    const findScrollContainer = (): Element | null => {
+      let element: Element | null = endRef.current?.parentElement || null;
+      while (element && !element.classList.contains('mind-session-inline-body')) {
+        element = element.parentElement;
+      }
+      return element;
+    };
+    
+    const handleScroll = () => {
+      if (!container) return;
+      
+      const threshold = 50; // pixels from bottom
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      
+      // Enable auto-scroll when user is near bottom, disable when scrolled up
+      shouldAutoScroll.current = distanceFromBottom < threshold;
+    };
+    
+    // Set up scroll listener after component mounts
+    setTimeout(() => {
+      container = findScrollContainer();
+      if (container) {
+        container.addEventListener('scroll', handleScroll);
+      }
+    }, 0);
+    
+    return () => {
+      if (container) {
+        container.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, []);
 
   return (
     <div className="message-list">
