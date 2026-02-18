@@ -1574,6 +1574,7 @@ function MyMindView() {
                     messages={inlineMessages}
                     isLoading={isInlineSessionLoading}
                     sessionId={inlineSession.id}
+                    projectId={inlineSession.project_id || null}
                   />
                 </div>
                 <ChatInput

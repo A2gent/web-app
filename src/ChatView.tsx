@@ -495,6 +495,7 @@ function ChatView() {
             messages={messages} 
             isLoading={isLoading} 
             sessionId={session?.id || null}
+            projectId={session?.project_id || null}
             systemPromptSnapshot={systemPromptSnapshot}
           />
         ) : (

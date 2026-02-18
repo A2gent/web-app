@@ -14,6 +14,7 @@ interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
   sessionId: string | null;
+  projectId?: string | null;
   systemPromptSnapshot?: SystemPromptSnapshot | null;
 }
 
@@ -33,7 +34,7 @@ interface DiffRow {
 
 const DIFF_CONTEXT_LINES = 3;
 
-const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionId, systemPromptSnapshot }) => {
+const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionId, projectId, systemPromptSnapshot }) => {
   const parseEditToolInput = (input: Record<string, unknown>): EditToolInput | null => {
     const path = input.path;
     const oldString = input.old_string;
@@ -373,7 +374,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
                 <>
                   <span className="tool-inline-separator">·</span>
                   <Link
-                    to={buildOpenInMyMindUrl(filePath)}
+                    to={buildOpenInMyMindUrl(filePath, projectId || undefined)}
                     className="tool-path-link"
                     onClick={(event) => {
                       event.stopPropagation();

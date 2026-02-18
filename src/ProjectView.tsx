@@ -3,7 +3,6 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   browseMindDirectories,
-  cancelSessionRun,
   createSession,
   deleteProject,
   deleteProjectFile,
@@ -16,17 +15,14 @@ import {
   listProviders,
   listSessions,
   saveProjectFile,
-  sendMessageStream,
   updateProject,
   type LLMProviderType,
-  type Message,
   type MindTreeEntry,
   type Project,
   type ProviderConfig,
   type Session,
 } from './api';
 import ChatInput from './ChatInput';
-import MessageList from './MessageList';
 import {
   AGENT_INSTRUCTION_BLOCKS_SETTING_KEY,
   AGENT_SYSTEM_PROMPT_APPEND_SETTING_KEY,
@@ -450,20 +446,15 @@ function ProjectView() {
   const [treePanelWidth, setTreePanelWidth] = useState(readStoredTreePanelWidth);
   const treeResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
-  // File session panel state
-  const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(false);
+  // File session context state
   const [isSessionContextExpanded, setIsSessionContextExpanded] = useState(false);
   const [sessionContextMessage, setSessionContextMessage] = useState('');
   const [sessionTargetLabel, setSessionTargetLabel] = useState('');
-  const [inlineSession, setInlineSession] = useState<Session | null>(null);
-  const [inlineMessages, setInlineMessages] = useState<Message[]>([]);
-  const [isInlineSessionLoading, setIsInlineSessionLoading] = useState(false);
   const [agentInstructionFilePaths, setAgentInstructionFilePaths] = useState<Set<string>>(new Set());
   const [isAddingAgentInstructionFile, setIsAddingAgentInstructionFile] = useState(false);
   const [isFileActionsMenuOpen, setIsFileActionsMenuOpen] = useState(false);
   const fileActionsMenuRef = useRef<HTMLDivElement | null>(null);
   const handledOpenFileQueryRef = useRef('');
-  const activeInlineStreamAbortRef = useRef<AbortController | null>(null);
 
   // Load project details
   useEffect(() => {
@@ -738,12 +729,22 @@ function ProjectView() {
     setError(null);
 
     try {
+      const combinedMessage = sessionContextMessage
+        ? `${sessionContextMessage}\n\n---\n\n${message}`
+        : message;
+
       const created = await createSession({
         agent_id: 'build',
         provider: selectedProvider || undefined,
         project_id: projectId || undefined,
       });
-      handleSelectSession(created.id, message);
+      
+      // Clear context after using it
+      setSessionContextMessage('');
+      setSessionTargetLabel('');
+      setIsSessionContextExpanded(false);
+      
+      handleSelectSession(created.id, combinedMessage);
     } catch (err) {
       console.error('Failed to create session:', err);
       setError(err instanceof Error ? err.message : 'Failed to create session');
@@ -972,148 +973,19 @@ function ProjectView() {
     const label = type === 'folder' ? `folder "${path || 'root'}"` : `file "${path}"`;
     setSessionTargetLabel(label);
     setSessionContextMessage(buildMindSessionContext(type, fullPath));
-    setIsSessionContextExpanded(false);
-    setInlineSession(null);
-    setInlineMessages([]);
-    setIsSessionPanelOpen(true);
-  };
-
-  const closeSessionDialog = () => {
-    setIsSessionPanelOpen(false);
-    setSessionTargetLabel('');
-    setSessionContextMessage('');
-    setInlineSession(null);
-    setInlineMessages([]);
-    setIsInlineSessionLoading(false);
-    if (activeInlineStreamAbortRef.current) {
-      activeInlineStreamAbortRef.current.abort();
-      activeInlineStreamAbortRef.current = null;
-    }
-  };
-
-  const handleCreateMindSession = async (userMessage: string) => {
-    if (!projectId) return;
+    setIsSessionContextExpanded(true);
+    setSessionsCollapsed(false);
     
-    setIsCreatingSession(true);
-    setError(null);
-
-    try {
-      const combinedMessage = sessionContextMessage
-        ? `${sessionContextMessage}\n\n---\n\n${userMessage}`
-        : userMessage;
-
-      const created = await createSession({
-        agent_id: 'build',
-        task: combinedMessage,
-        provider: selectedProvider || undefined,
-        project_id: projectId,
-      });
-
-      const now = new Date().toISOString();
-      setInlineSession({
-        id: created.id,
-        agent_id: created.agent_id,
-        provider: created.provider,
-        project_id: created.project_id,
-        title: 'Session',
-        status: 'running',
-        created_at: created.created_at,
-        updated_at: now,
-      });
-      setInlineMessages([{ role: 'user', content: combinedMessage, timestamp: now }]);
-      setIsInlineSessionLoading(true);
-
-      // Start streaming the response
-      const abortController = new AbortController();
-      activeInlineStreamAbortRef.current = abortController;
-
-      const eventIterator = sendMessageStream(created.id, '', abortController.signal);
-      let assistantContent = '';
-
-      for await (const event of eventIterator) {
-        if (event.type === 'assistant_delta') {
-          assistantContent += event.delta;
-          setInlineMessages((prev) => {
-            const messages = [...prev];
-            const lastMessage = messages[messages.length - 1];
-            if (lastMessage?.role === 'assistant') {
-              return [...messages.slice(0, -1), { ...lastMessage, content: assistantContent }];
-            }
-            return [...messages, { role: 'assistant', content: assistantContent, timestamp: new Date().toISOString() }];
-          });
-        } else if (event.type === 'done' || event.type === 'error') {
-          break;
-        }
+    // Scroll to the sessions form
+    setTimeout(() => {
+      const sessionsComposer = document.querySelector('.project-sessions-composer');
+      if (sessionsComposer) {
+        sessionsComposer.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-
-      // Refresh session to get final status
-      const finalSession = await getSession(created.id);
-      setInlineSession(finalSession);
-      setIsInlineSessionLoading(false);
-      activeInlineStreamAbortRef.current = null;
-    } catch (err) {
-      console.error('Failed to create session:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create session');
-      setIsInlineSessionLoading(false);
-    } finally {
-      setIsCreatingSession(false);
-    }
+    }, 100);
   };
 
-  const handleSendInlineMessage = async (message: string) => {
-    if (!inlineSession) return;
-    
-    setIsInlineSessionLoading(true);
-    setInlineMessages((prev) => [...prev, { role: 'user', content: message, timestamp: new Date().toISOString() }]);
 
-    try {
-      const abortController = new AbortController();
-      activeInlineStreamAbortRef.current = abortController;
-
-      const eventIterator = sendMessageStream(inlineSession.id, message, abortController.signal);
-      let assistantContent = '';
-
-      for await (const event of eventIterator) {
-        if (event.type === 'assistant_delta') {
-          assistantContent += event.delta;
-          setInlineMessages((prev) => {
-            const messages = [...prev];
-            const lastMessage = messages[messages.length - 1];
-            if (lastMessage?.role === 'assistant') {
-              return [...messages.slice(0, -1), { ...lastMessage, content: assistantContent }];
-            }
-            return [...messages, { role: 'assistant', content: assistantContent, timestamp: new Date().toISOString() }];
-          });
-        } else if (event.type === 'done' || event.type === 'error') {
-          break;
-        }
-      }
-
-      const finalSession = await getSession(inlineSession.id);
-      setInlineSession(finalSession);
-      setIsInlineSessionLoading(false);
-      activeInlineStreamAbortRef.current = null;
-    } catch (err) {
-      console.error('Failed to send message:', err);
-      setError(err instanceof Error ? err.message : 'Failed to send message');
-      setIsInlineSessionLoading(false);
-    }
-  };
-
-  const handleCancelInlineSession = async () => {
-    if (activeInlineStreamAbortRef.current) {
-      activeInlineStreamAbortRef.current.abort();
-      activeInlineStreamAbortRef.current = null;
-    }
-    if (inlineSession) {
-      try {
-        await cancelSessionRun(inlineSession.id);
-      } catch (err) {
-        console.error('Failed to cancel session:', err);
-      }
-    }
-    setIsInlineSessionLoading(false);
-  };
 
   // Computed values
   const hasUnsavedChanges = selectedFileContent !== savedFileContent;
@@ -1561,10 +1433,53 @@ function ProjectView() {
               )}
 
               <div className="project-sessions-composer">
+                {sessionContextMessage && (
+                  <div className="session-context-section">
+                    {isSessionContextExpanded ? (
+                      <textarea
+                        className="mind-session-textarea context-textarea"
+                        value={sessionContextMessage}
+                        onChange={(event) => setSessionContextMessage(event.target.value)}
+                        disabled={isCreatingSession}
+                        placeholder="Generated context"
+                      />
+                    ) : null}
+                    <div className="session-context-controls">
+                      {sessionTargetLabel && (
+                        <span className="session-target-label">
+                          Creating session for {sessionTargetLabel}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="mind-session-context-toggle"
+                        onClick={() => setIsSessionContextExpanded((prev) => !prev)}
+                        disabled={isCreatingSession}
+                      >
+                        {isSessionContextExpanded ? 'Hide context' : 'Show context'}
+                      </button>
+                      <button
+                        type="button"
+                        className="settings-remove-btn"
+                        onClick={() => {
+                          setSessionContextMessage('');
+                          setSessionTargetLabel('');
+                          setIsSessionContextExpanded(false);
+                        }}
+                        disabled={isCreatingSession}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <ChatInput
                   onSend={handleStartSession}
                   disabled={isCreatingSession}
                   autoFocus={!rootFolder}
+                  placeholder={sessionTargetLabel
+                    ? `Describe the task for ${sessionTargetLabel}...`
+                    : 'Start a new chat...'}
                   actionControls={
                     providers.length > 0 ? (
                       <div className="sessions-new-chat-controls">
@@ -1775,116 +1690,7 @@ function ProjectView() {
         </div>
       ) : null}
 
-      {/* File Session Panel */}
-      {isSessionPanelOpen ? (
-        <div
-          className={`mind-session-panel ${inlineSession ? 'with-inline-session' : 'create-mode'}`}
-          role="region"
-          aria-label="Create session for file"
-        >
-          {inlineSession ? (
-            <div className="mind-session-panel-header">
-              <h2>Session</h2>
-              <div className="mind-session-inline-meta">
-                <span className={`session-status status-${inlineSession.status}`}>
-                  {inlineSession.status}
-                </span>
-                <button
-                  type="button"
-                  className="settings-add-btn"
-                  onClick={() => navigate(`/chat/${inlineSession.id}`)}
-                >
-                  Open full session
-                </button>
-                <button
-                  type="button"
-                  className="settings-remove-btn"
-                  onClick={() => {
-                    setInlineSession(null);
-                    setInlineMessages([]);
-                    setIsInlineSessionLoading(false);
-                  }}
-                >
-                  New session
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {inlineSession ? (
-            <div className="mind-session-inline-conversation">
-              <div className="mind-session-inline-body">
-                <MessageList
-                  messages={inlineMessages}
-                  isLoading={isInlineSessionLoading}
-                  sessionId={inlineSession.id}
-                />
-              </div>
-              <ChatInput
-                onSend={(message) => void handleSendInlineMessage(message)}
-                disabled={isInlineSessionLoading}
-                onStop={() => void handleCancelInlineSession()}
-                showStopButton={isInlineSessionLoading || inlineSession.status === 'running'}
-                canStop={true}
-              />
-            </div>
-          ) : (
-            <div className="mind-session-creation-form">
-              {isSessionContextExpanded ? (
-                <textarea
-                  id="mind-session-context"
-                  className="mind-session-textarea context-textarea"
-                  value={sessionContextMessage}
-                  onChange={(event) => setSessionContextMessage(event.target.value)}
-                  disabled={isCreatingSession || isInlineSessionLoading}
-                  placeholder="Generated context"
-                />
-              ) : null}
-              <div className="mind-session-controls-row">
-                <button
-                  type="button"
-                  className="mind-session-context-toggle"
-                  onClick={() => setIsSessionContextExpanded((prev) => !prev)}
-                  disabled={isCreatingSession || isInlineSessionLoading}
-                >
-                  {isSessionContextExpanded ? 'Hide generated context' : 'Show generated context'}
-                </button>
-                <button type="button" className="settings-remove-btn" onClick={closeSessionDialog} disabled={isCreatingSession}>
-                  Close
-                </button>
-              </div>
-              <ChatInput
-                onSend={(message) => void handleCreateMindSession(message)}
-                disabled={isCreatingSession || isInlineSessionLoading}
-                autoFocus
-                placeholder={sessionTargetLabel
-                  ? `Describe the task for ${sessionTargetLabel.toLowerCase()}...`
-                  : 'Describe the task...'}
-                actionControls={(
-                  <div className="sessions-new-chat-controls">
-                    {providers.length > 0 ? (
-                      <label className="chat-provider-select">
-                        <select
-                          value={selectedProvider}
-                          onChange={(event) => setSelectedProvider(event.target.value as LLMProviderType)}
-                          title="Provider"
-                          aria-label="Provider"
-                          disabled={isCreatingSession || isInlineSessionLoading}
-                        >
-                          {providers.map((provider) => (
-                            <option key={provider.type} value={provider.type}>
-                              {provider.display_name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                  </div>
-                )}
-              />
-            </div>
-          )}
-        </div>
-      ) : null}
+
     </div>
   );
 }
