@@ -2,17 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import ChatInput from './ChatInput';
 import MessageList from './MessageList';
+import QuestionPrompt from './QuestionPrompt';
 import { 
   getSession, 
-  createSession, 
   cancelSessionRun,
   listProviders,
   sendMessageStream,
+  getPendingQuestion,
+  answerQuestion,
   type LLMProviderType,
   type ProviderConfig,
   type Session, 
   type Message,
   type ChatStreamEvent,
+  type PendingQuestion,
 } from './api';
 
 type ChatLocationState = {
@@ -152,6 +155,8 @@ function ChatView() {
   const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
   const queuedMessagesRef = useRef<string[]>([]);
   const activeStreamAbortRef = useRef<AbortController | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
+  const [questionAnswer, setQuestionAnswer] = useState<string>('');
 
   const SESSION_POLL_INTERVAL_MS = 2000; // Poll every 2 seconds for active sessions
   
@@ -228,6 +233,28 @@ function ChatView() {
     };
   }, [session, isLoading, SESSION_POLL_INTERVAL_MS]);
 
+  // Load pending question when session status is input_required
+  useEffect(() => {
+    if (!session || session.status !== 'input_required') {
+      setPendingQuestion(null);
+      setQuestionAnswer('');
+      return;
+    }
+
+    const loadQuestion = async () => {
+      try {
+        const question = await getPendingQuestion(session.id);
+        setPendingQuestion(question);
+        setQuestionAnswer(''); // Clear previous answer
+      } catch (err) {
+        console.error('Failed to load pending question:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load question');
+      }
+    };
+
+    loadQuestion();
+  }, [session?.id, session?.status]);
+
   const loadSession = async (id: string) => {
     try {
       setIsLoading(true);
@@ -243,21 +270,7 @@ function ChatView() {
     }
   };
 
-  const pushQueuedMessage = (message: string) => {
-    const next = [...queuedMessagesRef.current, message];
-    queuedMessagesRef.current = next;
-    setQueuedMessages(next);
-  };
 
-  const shiftQueuedMessage = (): string | null => {
-    if (queuedMessagesRef.current.length === 0) {
-      return null;
-    }
-    const [nextMessage, ...remaining] = queuedMessagesRef.current;
-    queuedMessagesRef.current = remaining;
-    setQueuedMessages(remaining);
-    return nextMessage;
-  };
 
   const sendMessageWithStreaming = async (targetSessionId: string, message: string) => {
     setActiveRequestSessionId(targetSessionId);
@@ -359,50 +372,29 @@ function ChatView() {
     }
   };
 
-  const processMessageQueue = async (targetSessionId: string, initialMessage: string) => {
-    let nextMessage: string | null = initialMessage;
 
-    while (nextMessage) {
-      // eslint-disable-next-line no-await-in-loop
-      await sendMessageWithStreaming(targetSessionId, nextMessage);
-      nextMessage = shiftQueuedMessage();
-    }
-  };
 
   const handleSendMessage = async (message: string) => {
+    setError(null);
+    
+    // If there's a pending question, treat the message as an answer
+    if (session && pendingQuestion) {
+      await handleAnswerQuestion(message);
+      return;
+    }
+    
     if (!session) {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const created = await createSession({
-          agent_id: 'build',
-          provider: selectedProvider || undefined,
-        });
-        navigate(`/chat/${created.id}`, {
-          replace: true,
-          state: { initialMessage: message } satisfies ChatLocationState,
-        });
-      } catch (err) {
-        console.error('Failed to create session:', err);
-        setError(err instanceof Error ? err.message : 'Failed to create session');
-      } finally {
-        setIsLoading(false);
-      }
       return;
     }
-
-    if (activeRequestSessionId === session.id) {
-      pushQueuedMessage(message);
-      return;
-    }
-
-    await processMessageQueue(session.id, message);
+    
+    await sendMessageWithStreaming(session.id, message);
   };
 
   const handleCancelSession = async () => {
     if (!session) {
       return;
     }
+
     activeStreamAbortRef.current?.abort();
     queuedMessagesRef.current = [];
     setQueuedMessages([]);
@@ -420,6 +412,39 @@ function ChatView() {
       setIsLoading(false);
       setActiveRequestSessionId((prev) => (prev === session.id ? null : prev));
     }
+  };
+
+  const handleAnswerQuestion = async (answer: string) => {
+    if (!session) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await answerQuestion(session.id, answer);
+      setPendingQuestion(null);
+      setQuestionAnswer('');
+      
+      // Reload session to continue execution
+      const fresh = await getSession(session.id);
+      setSession(fresh);
+      setMessages(fresh.messages || []);
+      
+      // If session is running again, start polling or streaming
+      if (fresh.status === 'running') {
+        setActiveRequestSessionId(fresh.id);
+        // The existing polling mechanism will handle updates
+      }
+    } catch (err) {
+      console.error('Failed to answer question:', err);
+      setError(err instanceof Error ? err.message : 'Failed to answer question');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectQuestionOption = (answer: string) => {
+    setQuestionAnswer(answer);
   };
 
   const isActiveRequest = Boolean(session && activeRequestSessionId === session.id);
@@ -506,12 +531,23 @@ function ChatView() {
         )}
       </div>
       
+      {session && pendingQuestion && (
+        <QuestionPrompt
+          question={pendingQuestion}
+          onSelectOption={handleSelectQuestionOption}
+          selectedOption={questionAnswer}
+        />
+      )}
+      
       <ChatInput
         onSend={handleSendMessage}
         disabled={inputDisabled}
         onStop={() => void handleCancelSession()}
         showStopButton={Boolean(session && isActiveRequest)}
         canStop={Boolean(session)}
+        value={questionAnswer}
+        onValueChange={setQuestionAnswer}
+        placeholder={pendingQuestion ? "Type your answer or select an option above..." : undefined}
         actionControls={!session && providers.length > 0 ? (
           <label className="chat-provider-select">
             <select

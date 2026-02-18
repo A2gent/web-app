@@ -10,6 +10,8 @@ interface ChatInputProps {
   showStopButton?: boolean;
   canStop?: boolean;
   placeholder?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
 }
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
@@ -153,6 +155,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   showStopButton = false,
   canStop = true,
   placeholder,
+  value: externalValue,
+  onValueChange,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const waveformCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -172,7 +176,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const smoothedBarHeightsRef = useRef<Float32Array | null>(null);
   const lastWaveformDrawTimeRef = useRef<number>(0);
 
-  const [value, setValue] = useState('');
+  const [internalValue, setInternalValue] = useState('');
+  
+  const isControlled = externalValue !== undefined;
+  const value = isControlled ? externalValue : internalValue;
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingLevel, setRecordingLevel] = useState(0);
@@ -187,6 +194,15 @@ const ChatInput: React.FC<ChatInputProps> = ({
   });
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
 
+  const setValue = useCallback((newValue: string | ((prev: string) => string)) => {
+    const nextValue = typeof newValue === 'function' ? newValue(value) : newValue;
+    if (isControlled) {
+      onValueChange?.(nextValue);
+    } else {
+      setInternalValue(nextValue);
+    }
+  }, [isControlled, onValueChange, value]);
+
   const appendTranscript = useCallback((text: string) => {
     const normalized = text.trim();
     if (!normalized) return;
@@ -194,7 +210,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       const hasText = prev.trim().length > 0;
       return hasText ? `${prev.trimEnd()} ${normalized}` : normalized;
     });
-  }, []);
+  }, [setValue]);
 
   const clearWaveform = useCallback(() => {
     const canvas = waveformCanvasRef.current;

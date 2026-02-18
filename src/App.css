@@ -550,6 +550,16 @@ body.mind-resizing * {
   background-color: #ff9800;
 }
 
+.status-dot.status-input_required {
+  background-color: #9c27b0;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .session-delete-btn,
 .session-duplicate-btn {
   border: 1px solid #444;
@@ -765,7 +775,14 @@ body.mind-resizing * {
 
 .session-status.status-paused {
   background-color: rgba(255, 152, 0, 0.2);
+  border-color: #ff9800;
   color: #ff9800;
+}
+
+.session-status.status-input_required {
+  background-color: rgba(156, 39, 176, 0.2);
+  border-color: #9c27b0;
+  color: #9c27b0;
 }
 
 .session-failure-reason {
@@ -2157,6 +2174,11 @@ body.mind-resizing * {
   background-color: #ff9800;
 }
 
+.session-status-dot.status-input_required {
+  background-color: #9c27b0;
+  animation: pulse 2s ease-in-out infinite;
+}
+
 @keyframes session-status-spin {
   to {
     transform: rotate(360deg);
@@ -2194,6 +2216,11 @@ body.mind-resizing * {
 
 .session-status-dot-large.status-paused {
   background-color: #ff9800;
+}
+
+.session-status-dot-large.status-input_required {
+  background-color: #9c27b0;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .session-row-right {

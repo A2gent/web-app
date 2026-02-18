@@ -178,6 +178,19 @@ export interface ToolResult {
   metadata?: Record<string, unknown>;
 }
 
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface PendingQuestion {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiple: boolean;
+  custom: boolean;
+}
+
 export interface ChatResponse {
   content: string;
   messages: Message[];
@@ -731,6 +744,26 @@ export async function cancelSessionRun(sessionId: string): Promise<void> {
   });
   if (!response.ok) {
     throw await buildApiError(response, 'Failed to cancel session');
+  }
+}
+
+export async function getPendingQuestion(sessionId: string): Promise<PendingQuestion | null> {
+  const response = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/question`);
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to get pending question');
+  }
+  const data = await response.json() as { question?: PendingQuestion };
+  return data.question || null;
+}
+
+export async function answerQuestion(sessionId: string, answer: string): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/answer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answer }),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to answer question');
   }
 }
 
