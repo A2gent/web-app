@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
+import AgentUrlComboField from './AgentUrlComboField';
 import SettingsPanel from './SettingsPanel';
-import { getApiBaseUrl, getSettingsPayload, setApiBaseUrl, updateSettings } from './api';
+import {
+  addApiBaseUrlToHistory,
+  getApiBaseUrl,
+  getApiBaseUrlHistory,
+  removeApiBaseUrlFromHistory,
+  getSettingsPayload,
+  setApiBaseUrl,
+  updateSettings,
+} from './api';
 
 function SettingsView() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -10,6 +19,7 @@ function SettingsView() {
   const [defaultSystemPrompt, setDefaultSystemPrompt] = useState('');
   const [defaultSystemPromptWithoutBuiltInTools, setDefaultSystemPromptWithoutBuiltInTools] = useState('');
   const [apiBaseUrlInput, setApiBaseUrlInput] = useState(() => getApiBaseUrl());
+  const [apiBaseUrlHistory, setApiBaseUrlHistory] = useState<string[]>(() => getApiBaseUrlHistory());
   const [apiBaseUrlMessage, setApiBaseUrlMessage] = useState<string | null>(null);
 
   const loadSettings = async () => {
@@ -36,8 +46,10 @@ function SettingsView() {
     try {
       setApiBaseUrl(apiBaseUrlInput);
       const normalized = getApiBaseUrl();
+      addApiBaseUrlToHistory(normalized);
       setApiBaseUrlInput(normalized);
-      setApiBaseUrlMessage(`Saved frontend backend URL: ${normalized}`);
+      setApiBaseUrlHistory(getApiBaseUrlHistory());
+      setApiBaseUrlMessage(`Connected to agent at: ${normalized}`);
       await loadSettings();
     } catch (err) {
       console.error('Failed to update API base URL:', err);
@@ -49,8 +61,13 @@ function SettingsView() {
     setApiBaseUrl('');
     const normalized = getApiBaseUrl();
     setApiBaseUrlInput(normalized);
-    setApiBaseUrlMessage(`Reset to default backend URL: ${normalized}`);
+    setApiBaseUrlMessage(`Reset to default: ${normalized}`);
     await loadSettings();
+  };
+
+  const handleRemoveUrlFromHistory = (url: string) => {
+    removeApiBaseUrlFromHistory(url);
+    setApiBaseUrlHistory(getApiBaseUrlHistory());
   };
 
   const handleSaveSettings = async (nextSettings: Record<string, string>) => {
@@ -79,20 +96,19 @@ function SettingsView() {
 
       <div className="page-content page-content-narrow settings-sections">
         <div className="settings-panel">
-          <h2>Frontend connection</h2>
+          <h2>Agent Connection</h2>
           <p className="settings-help">
-            Agent backend URL is stored in this browser only (local storage), not in backend settings.
+            Connect this web app to an agent backend running on any machine. Switch between URLs to manage multiple agents — each one can run independently on a different server or device. The URL is stored in this browser only (local storage).
           </p>
-          <label className="settings-field">
+          <div className="settings-field">
             <span>Agent backend URL</span>
-            <input
-              type="text"
+            <AgentUrlComboField
               value={apiBaseUrlInput}
-              onChange={(e) => setApiBaseUrlInput(e.target.value)}
-              placeholder="http://localhost:8080"
-              autoComplete="off"
+              history={apiBaseUrlHistory}
+              onChange={setApiBaseUrlInput}
+              onRemoveFromHistory={handleRemoveUrlFromHistory}
             />
-          </label>
+          </div>
           <div className="settings-actions">
             <button type="button" onClick={handleSaveApiBaseUrl} className="settings-save-btn">
               Save URL

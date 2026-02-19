@@ -1,6 +1,7 @@
 // API client for aagent HTTP server
 
 const API_BASE_URL_STORAGE_KEY = 'a2gent.api_base_url';
+const API_BASE_URL_HISTORY_KEY = 'a2gent.api_base_url_history';
 const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 const APP_TITLE_STORAGE_KEY = 'a2gent.app_title';
 const DEFAULT_APP_TITLE = '🤖 A2';
@@ -67,6 +68,39 @@ export function setApiBaseUrl(url: string): void {
   }
 
   window.localStorage.setItem(API_BASE_URL_STORAGE_KEY, normalized);
+}
+
+export function getApiBaseUrlHistory(): string[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(API_BASE_URL_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v): v is string => typeof v === 'string' && v.trim() !== '');
+  } catch {
+    return [];
+  }
+}
+
+export function addApiBaseUrlToHistory(url: string): void {
+  if (typeof window === 'undefined') return;
+  const normalized = normalizeApiBaseUrl(url);
+  if (normalized === '') return;
+  const history = getApiBaseUrlHistory();
+  const filtered = history.filter((u) => u !== normalized);
+  filtered.unshift(normalized);
+  window.localStorage.setItem(API_BASE_URL_HISTORY_KEY, JSON.stringify(filtered));
+}
+
+export function removeApiBaseUrlFromHistory(url: string): void {
+  if (typeof window === 'undefined') return;
+  const normalized = normalizeApiBaseUrl(url);
+  const history = getApiBaseUrlHistory();
+  const filtered = history.filter((u) => u !== normalized);
+  window.localStorage.setItem(API_BASE_URL_HISTORY_KEY, JSON.stringify(filtered));
 }
 
 function normalizeAppTitle(title: string): string {
