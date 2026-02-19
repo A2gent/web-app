@@ -1,4 +1,4 @@
-# A²gent/caesar 
+# 🏛️ A²gent/caesar 
 > Et tu, Brute?
 
 A personal AI agent control web app. Uses [A²gent/brute](https://github.com/A2gent/brute) terminal agent as a backend.
