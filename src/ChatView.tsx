@@ -3,10 +3,12 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import ChatInput from './ChatInput';
 import MessageList from './MessageList';
 import QuestionPrompt from './QuestionPrompt';
+import { EmptyState, EmptyStateTitle, EmptyStateHint } from './EmptyState';
 import { 
   getSession, 
   cancelSessionRun,
   listProviders,
+  getProject,
   sendMessageStream,
   getPendingQuestion,
   answerQuestion,
@@ -157,6 +159,7 @@ function ChatView() {
   const activeStreamAbortRef = useRef<AbortController | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [questionAnswer, setQuestionAnswer] = useState<string>('');
+  const [projectName, setProjectName] = useState<string | null>(null);
 
   const SESSION_POLL_INTERVAL_MS = 2000; // Poll every 2 seconds for active sessions
   
@@ -175,8 +178,28 @@ function ChatView() {
     } else {
       setSession(null);
       setMessages([]);
+      setProjectName(null);
     }
   }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!session?.project_id) {
+      setProjectName(null);
+      return;
+    }
+
+    const loadProject = async () => {
+      try {
+        const project = await getProject(session.project_id!);
+        setProjectName(project.name);
+      } catch (err) {
+        console.error('Failed to load project:', err);
+        setProjectName(null);
+      }
+    };
+
+    loadProject();
+  }, [session?.project_id]);
 
   useEffect(() => {
     const initialMessage = locationState.initialMessage?.trim();
@@ -463,6 +486,12 @@ function ChatView() {
               />
               <div className="session-meta-stack">
                 <div className="session-meta-row">
+                  {projectName ? (
+                    <>
+                      <span className="session-project-name">{projectName}</span>
+                      <span className="session-title-separator">/</span>
+                    </>
+                  ) : null}
                   <span className="session-title">{session.title || 'Untitled Session'}</span>
                 {session.provider ? <span className="session-provider-chip">{session.provider}</span> : null}
                 {session.model ? <span className="session-provider-chip">{session.model}</span> : null}
@@ -524,10 +553,10 @@ function ChatView() {
             systemPromptSnapshot={systemPromptSnapshot}
           />
         ) : (
-          <div className="empty-state">
-            <h2>Start a Conversation</h2>
-            <p>Type a message below to begin chatting with the agent.</p>
-          </div>
+          <EmptyState>
+            <EmptyStateTitle>Start a conversation</EmptyStateTitle>
+            <EmptyStateHint>Type a message below to begin chatting with the agent.</EmptyStateHint>
+          </EmptyState>
         )}
       </div>
       

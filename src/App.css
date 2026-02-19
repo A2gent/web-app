@@ -683,6 +683,16 @@ body.mind-resizing * {
   margin-right: auto;
 }
 
+.session-project-name {
+  font-weight: 500;
+  color: #9ca3af;
+}
+
+.session-title-separator {
+  color: #6b7280;
+  margin: 0 4px;
+}
+
 .session-title {
   font-weight: 500;
   color: #e0e0e0;
@@ -1835,16 +1845,17 @@ body.mind-resizing * {
 .sessions-empty {
   text-align: center;
   padding: 60px 20px;
-  color: #888;
+  color: #6b7280;
 }
 
 .sessions-empty p {
-  margin-bottom: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
 }
 
-.sessions-empty p:first-child {
-  font-size: 18px;
-  color: #e0e0e0;
+.sessions-empty p + p {
+  margin-top: 4px;
 }
 
 .sessions-list {
@@ -3205,8 +3216,9 @@ body.mind-resizing * {
   border: 1px dashed #475569;
   border-radius: 8px;
   padding: 14px;
-  color: #9ca3af;
+  color: #6b7280;
   background: #181b20;
+  font-size: 13px;
 }
 
 .mcp-form-actions {
@@ -6575,6 +6587,12 @@ input[type="checkbox"]:disabled {
 .empty-state-hint {
   font-size: 13px;
   color: #6b7280;
+}
+
+.empty-state-title {
+  font-size: 14px;
+  color: #9ca3af;
+  margin-bottom: 4px;
 }
 
 /* Responsive adjustments for mobile */
