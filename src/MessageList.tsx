@@ -480,6 +480,31 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
       const toolResults = message.tool_results ?? [];
 
       if (message.role === 'assistant' && toolCalls.length > 0) {
+        // First, render the assistant's text content if present
+        if (message.content?.trim()) {
+          const hasTokens = (message.input_tokens ?? 0) > 0 || (message.output_tokens ?? 0) > 0;
+          const totalTokens = (message.input_tokens ?? 0) + (message.output_tokens ?? 0);
+          nodes.push(
+            <div
+              key={`assistant-${index}`}
+              className={`message message-assistant${isCompactionMessage(message) ? ' message-compaction' : ''}`}
+            >
+              <div className="message-content">
+                {renderMessageContent(message)}
+              </div>
+              <div className="message-footer">
+                {hasTokens ? (
+                  <span className="message-tokens" title={`Input: ${message.input_tokens ?? 0} tokens, Output: ${message.output_tokens ?? 0} tokens`}>
+                    {totalTokens} tok
+                  </span>
+                ) : null}
+                <span className="message-time" title={new Date(message.timestamp).toLocaleString()}>🕐</span>
+              </div>
+            </div>,
+          );
+        }
+
+        // Then render tool execution cards
         let mergedResults = [...toolResults];
         let timestamp = message.timestamp;
         const next = messages[index + 1];

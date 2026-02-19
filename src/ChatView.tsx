@@ -230,12 +230,20 @@ function ChatView() {
     loadProviders();
   }, []);
 
-  // Poll active sessions for real-time updates after streaming ends
+  // Poll active sessions for real-time updates
+  // This handles:
+  // 1. Sessions running from external sources (web-app reload, TUI, jobs)
+  // 2. Session status changes (input_required, completed, failed)
+  // Note: We don't poll during our own active stream (isActiveRequest)
   useEffect(() => {
-    if (!session || isLoading) {
+    if (!session) {
       return;
     }
     if (isTerminalSessionStatus(session.status)) {
+      return;
+    }
+    // Don't poll while we have an active stream - the stream events handle updates
+    if (activeRequestSessionId === session.id) {
       return;
     }
 
@@ -254,7 +262,7 @@ function ChatView() {
     return () => {
       window.clearInterval(interval);
     };
-  }, [session, isLoading, SESSION_POLL_INTERVAL_MS]);
+  }, [session, activeRequestSessionId, SESSION_POLL_INTERVAL_MS]);
 
   // Load pending question when session status is input_required
   useEffect(() => {
@@ -360,6 +368,25 @@ function ChatView() {
 
     if (event.type === 'status') {
       setSession(prev => (prev && prev.id === targetSessionId ? { ...prev, status: event.status } : prev));
+      return;
+    }
+
+    if (event.type === 'tool_executing') {
+      // Tool calls are now being executed - update messages with tool calls
+      // The actual tool call data is in the event, but we'll wait for tool_completed
+      // to get the full updated messages including results
+      return;
+    }
+
+    if (event.type === 'tool_completed') {
+      // Update messages with tool calls and results
+      setMessages(event.messages);
+      setSession(prev => (prev && prev.id === targetSessionId ? { ...prev, status: event.status } : prev));
+      return;
+    }
+
+    if (event.type === 'step_completed') {
+      // Step completed, agent might continue or be done
       return;
     }
 
