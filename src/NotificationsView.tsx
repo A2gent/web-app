@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { EmptyState, EmptyStateTitle, EmptyStateHint } from './EmptyState';
 
 interface Notification {
   id: string;
@@ -40,12 +41,12 @@ function NotificationsView({ notifications, onClearAll, onDismiss }: Notificatio
 
       <div className="page-content">
         {notifications.length === 0 ? (
-          <div className="empty-state">
-            <p>No notifications yet.</p>
-            <p className="empty-state-hint">
+          <EmptyState>
+            <EmptyStateTitle>No notifications yet.</EmptyStateTitle>
+            <EmptyStateHint>
               Notifications appear as toast messages in the bottom-left corner when they arrive.
-            </p>
-          </div>
+            </EmptyStateHint>
+          </EmptyState>
         ) : (
           <div className="notifications-list">
             {notifications.map((notification) => (

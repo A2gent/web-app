@@ -14,6 +14,7 @@ import {
 } from './api';
 import { buildOpenInMyMindUrl } from './myMindNavigation';
 import { SKILLS_FOLDER_KEY } from './skills';
+import { EmptyState, EmptyStateTitle } from './EmptyState';
 
 function getParentPath(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, '');
@@ -516,7 +517,11 @@ function SkillsView() {
               </button>
             </div>
             <div className="mind-picker-list">
-              {!isLoadingBrowse && browseEntries.length === 0 ? <div className="sessions-empty">No folders found.</div> : null}
+              {!isLoadingBrowse && browseEntries.length === 0 ? (
+              <EmptyState className="sessions-empty">
+                <EmptyStateTitle>No folders found.</EmptyStateTitle>
+              </EmptyState>
+            ) : null}
               {browseEntries.map((entry) => (
                 <button
                   type="button"

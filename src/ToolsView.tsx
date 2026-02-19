@@ -20,6 +20,7 @@ import {
   launchBrowserChrome,
   type BrowserChromeProfileStatus,
 } from './api';
+import { EmptyState, EmptyStateTitle } from './EmptyState';
 import {
   CAMERA_INDEX,
   CAMERA_OUTPUT_DIR,
@@ -1103,7 +1104,11 @@ function ToolsView() {
               </button>
             </div>
             <div className="mind-picker-list">
-              {!isLoadingBrowse && browseEntries.length === 0 ? <div className="sessions-empty">No folders found.</div> : null}
+              {!isLoadingBrowse && browseEntries.length === 0 ? (
+              <EmptyState className="sessions-empty">
+                <EmptyStateTitle>No folders found.</EmptyStateTitle>
+              </EmptyState>
+            ) : null}
               {browseEntries.map((entry) => (
                 <button
                   type="button"

@@ -23,6 +23,7 @@ import {
   type Session,
 } from './api';
 import ChatInput from './ChatInput';
+import { EmptyState, EmptyStateTitle, EmptyStateHint } from './EmptyState';
 import {
   AGENT_INSTRUCTION_BLOCKS_SETTING_KEY,
   AGENT_SYSTEM_PROMPT_APPEND_SETTING_KEY,
@@ -1300,7 +1301,9 @@ function ProjectView() {
           <h1>Project Not Found</h1>
         </div>
         <div className="page-content">
-          <div className="sessions-empty">The requested project could not be found.</div>
+          <EmptyState className="sessions-empty">
+            <EmptyStateTitle>The requested project could not be found.</EmptyStateTitle>
+          </EmptyState>
         </div>
       </div>
     );
@@ -1478,7 +1481,11 @@ function ProjectView() {
 
                 <div className="mind-viewer-body">
                   {isLoadingFile ? <div className="sessions-loading">Loading file...</div> : null}
-                  {!isLoadingFile && !selectedFilePath ? <div className="sessions-empty">No file selected.</div> : null}
+                  {!isLoadingFile && !selectedFilePath ? (
+                  <EmptyState className="sessions-empty">
+                    <EmptyStateTitle>No file selected.</EmptyStateTitle>
+                  </EmptyState>
+                ) : null}
                   {!isLoadingFile && selectedFilePath && markdownMode === 'source' ? (
                     <textarea
                       className="mind-markdown-editor"
@@ -1514,9 +1521,10 @@ function ProjectView() {
               {isLoadingSessions ? (
                 <div className="sessions-loading">Loading sessions...</div>
               ) : sessions.length === 0 ? (
-                <div className="sessions-empty">
-                  <p>No sessions yet. Start speaking or typing below to create one.</p>
-                </div>
+                <EmptyState className="sessions-empty">
+                  <EmptyStateTitle>No sessions yet.</EmptyStateTitle>
+                  <EmptyStateHint>Start speaking or typing below to create one.</EmptyStateHint>
+                </EmptyState>
               ) : (
                 <div className="sessions-list project-sessions-list">
                   {sortedSessions.map((session) => (
@@ -1677,7 +1685,11 @@ function ProjectView() {
             </div>
             <div className="mind-picker-list">
               {isLoadingBrowse ? <div className="sessions-loading">Loading directories...</div> : null}
-              {!isLoadingBrowse && browseEntries.length === 0 ? <div className="sessions-empty">No folders found.</div> : null}
+              {!isLoadingBrowse && browseEntries.length === 0 ? (
+                <EmptyState className="sessions-empty">
+                  <EmptyStateTitle>No folders found.</EmptyStateTitle>
+                </EmptyState>
+              ) : null}
               {!isLoadingBrowse
                 ? browseEntries.map((entry) => (
                   <button key={entry.path} type="button" className="mind-picker-item" onClick={() => void loadBrowse(entry.path)}>

@@ -12,6 +12,7 @@ import {
   type ProviderConfig,
   type Session,
 } from './api';
+import { EmptyState, EmptyStateTitle, EmptyStateHint } from './EmptyState';
 
 const LAST_PROVIDER_STORAGE_KEY = 'a2gent.sessions.lastProvider';
 
@@ -264,10 +265,10 @@ function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) 
       <div className="sessions-layout">
         <div className="page-content sessions-list-container">
           {sessions.length === 0 ? (
-            <div className="sessions-empty">
-              <p>No sessions yet.</p>
-              <p>Start speaking or typing below to create one.</p>
-            </div>
+            <EmptyState className="sessions-empty">
+              <EmptyStateTitle>No sessions yet.</EmptyStateTitle>
+              <EmptyStateHint>Start speaking or typing below to create one.</EmptyStateHint>
+            </EmptyState>
           ) : (
             <div className="sessions-list">
               {sortedSessions.map((session) => (

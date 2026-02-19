@@ -9,6 +9,7 @@ import {
   type MCPServerRequest,
   type MCPServerTestResponse,
 } from './api';
+import { EmptyState, EmptyStateTitle } from './EmptyState';
 
 function parseNonEmptyLines(value: string): string[] {
   return value
@@ -350,7 +351,9 @@ function MCPServersView() {
         ) : (
           <div className="mcp-server-list">
             {sortedServers.length === 0 ? (
-              <div className="integration-empty-state">No MCP servers configured yet.</div>
+              <EmptyState className="mcp-empty-state">
+                <EmptyStateTitle>No MCP servers configured yet.</EmptyStateTitle>
+              </EmptyState>
             ) : (
               sortedServers.map((server) => {
                 const result = testResultsByServerId[server.id];

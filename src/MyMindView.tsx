@@ -28,6 +28,7 @@ import {
 } from './api';
 import ChatInput from './ChatInput';
 import MessageList from './MessageList';
+import { EmptyState, EmptyStateTitle } from './EmptyState';
 import {
   AGENT_INSTRUCTION_BLOCKS_SETTING_KEY,
   AGENT_SYSTEM_PROMPT_APPEND_SETTING_KEY,
@@ -1492,7 +1493,11 @@ function MyMindView() {
 
                 <div className="mind-viewer-body">
                   {isLoadingFile ? <div className="sessions-loading">Loading file...</div> : null}
-                  {!isLoadingFile && !selectedFilePath ? <div className="sessions-empty">No file selected.</div> : null}
+                  {!isLoadingFile && !selectedFilePath ? (
+                  <EmptyState className="sessions-empty">
+                    <EmptyStateTitle>No file selected.</EmptyStateTitle>
+                  </EmptyState>
+                ) : null}
                   {!isLoadingFile && selectedFilePath && markdownMode === 'source' ? (
                     <textarea
                       className="mind-markdown-editor"
@@ -1534,7 +1539,11 @@ function MyMindView() {
               </div>
               <div className="mind-picker-list">
                 {isLoadingBrowse ? <div className="sessions-loading">Loading directories...</div> : null}
-                {!isLoadingBrowse && browseEntries.length === 0 ? <div className="sessions-empty">No folders found.</div> : null}
+                {!isLoadingBrowse && browseEntries.length === 0 ? (
+                  <EmptyState className="sessions-empty">
+                    <EmptyStateTitle>No folders found.</EmptyStateTitle>
+                  </EmptyState>
+                ) : null}
                 {!isLoadingBrowse
                   ? browseEntries.map((entry) => (
                     <button key={entry.path} type="button" className="mind-picker-item" onClick={() => void loadBrowse(entry.path)}>
