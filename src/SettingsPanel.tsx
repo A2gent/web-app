@@ -32,8 +32,10 @@ interface CustomRow {
 
 const CONTEXT_COMPACTION_TRIGGER_PERCENT = 'AAGENT_CONTEXT_COMPACTION_TRIGGER_PERCENT';
 const CONTEXT_COMPACTION_PROMPT = 'AAGENT_CONTEXT_COMPACTION_PROMPT';
+const LLM_RETRIES = 'AAGENT_LLM_RETRIES';
 const DEFAULT_COMPACTION_TRIGGER = '80';
 const DEFAULT_COMPACTION_PROMPT = 'Create a concise continuation summary preserving goals, progress, constraints, and next actions.';
+const DEFAULT_LLM_RETRIES = '3';
 
 const MANAGED_INSTRUCTION_BLOCK_TYPES: InstructionBlockType[] = [
   BUILTIN_TOOLS_BLOCK_TYPE,
@@ -97,6 +99,7 @@ const MANAGED_KEYS = [
   ...SKILLS_MANAGED_SETTING_KEYS,
   CONTEXT_COMPACTION_TRIGGER_PERCENT,
   CONTEXT_COMPACTION_PROMPT,
+  LLM_RETRIES,
   AGENT_INSTRUCTION_BLOCKS_SETTING_KEY,
   AGENT_SYSTEM_PROMPT_APPEND_SETTING_KEY,
   'SAG_VOICE_ID',
@@ -161,6 +164,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     normalizeCompactionTriggerPercent(settings[CONTEXT_COMPACTION_TRIGGER_PERCENT] || DEFAULT_COMPACTION_TRIGGER),
   );
   const [compactionPrompt, setCompactionPrompt] = useState(settings[CONTEXT_COMPACTION_PROMPT] || DEFAULT_COMPACTION_PROMPT);
+  const [llmRetries, setLlmRetries] = useState(settings[LLM_RETRIES] || DEFAULT_LLM_RETRIES);
   const [agentInstructionBlocks, setAgentInstructionBlocks] = useState<InstructionBlock[]>(
     ensureManagedInstructionBlocks(parseInstructionBlocksSetting(settings[AGENT_INSTRUCTION_BLOCKS_SETTING_KEY] || '')),
   );
@@ -182,6 +186,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
     setCompactionTriggerPercent(normalizeCompactionTriggerPercent(settings[CONTEXT_COMPACTION_TRIGGER_PERCENT] || DEFAULT_COMPACTION_TRIGGER));
     setCompactionPrompt(settings[CONTEXT_COMPACTION_PROMPT] || DEFAULT_COMPACTION_PROMPT);
+    setLlmRetries(settings[LLM_RETRIES] || DEFAULT_LLM_RETRIES);
     setAgentInstructionBlocks(ensureManagedInstructionBlocks(parseInstructionBlocksSetting(settings[AGENT_INSTRUCTION_BLOCKS_SETTING_KEY] || '')));
   }, [settings]);
 
@@ -322,6 +327,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
     payload[CONTEXT_COMPACTION_PROMPT] = trimmedCompactionPrompt;
 
+    const retriesValue = Number.parseInt(llmRetries.trim(), 10);
+    if (!Number.isFinite(retriesValue) || retriesValue < 0 || retriesValue > 10) {
+      setSaveError('LLM retries must be a number between 0 and 10.');
+      return;
+    }
+    payload[LLM_RETRIES] = String(retriesValue);
+
     const draftSettings = buildInstructionSettingsDraft();
     payload[AGENT_INSTRUCTION_BLOCKS_SETTING_KEY] = draftSettings[AGENT_INSTRUCTION_BLOCKS_SETTING_KEY] || '';
     payload[AGENT_SYSTEM_PROMPT_APPEND_SETTING_KEY] = draftSettings[AGENT_SYSTEM_PROMPT_APPEND_SETTING_KEY] || '';
@@ -421,6 +433,29 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
           </details>
         ) : null}
+      </div>
+
+      <div className="settings-panel">
+        <h2>LLM Reliability</h2>
+        <p className="settings-help">
+          Configure retry behavior when LLM providers fail due to network issues or temporary errors.
+        </p>
+        <div className="settings-group">
+          <label className="settings-field">
+            <span>Retries per provider</span>
+            <input
+              type="number"
+              min="0"
+              max="10"
+              value={llmRetries}
+              onChange={(e) => setLlmRetries(e.target.value)}
+              style={{ width: '80px' }}
+            />
+            <span className="settings-field-hint">
+              Number of retry attempts before switching to next provider in fallback chain (0-10)
+            </span>
+          </label>
+        </div>
       </div>
 
       <div className="settings-panel">
