@@ -118,8 +118,9 @@ function AppLayout() {
   }, []);
 
   const NOTIFICATIONS_STORAGE_KEY = 'a2gent.notifications';
+  const SEEN_NOTIFICATION_IDS_KEY = 'a2gent.seen-notification-ids';
 
-  // Load notifications from localStorage on mount
+  // Load notifications and seen IDs from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
     if (stored) {
@@ -130,12 +131,32 @@ function AppLayout() {
         // Invalid JSON, ignore
       }
     }
+
+    const storedSeenIds = localStorage.getItem(SEEN_NOTIFICATION_IDS_KEY);
+    if (storedSeenIds) {
+      try {
+        const parsed = JSON.parse(storedSeenIds);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(id => seenWebAppNotificationIDsRef.current.add(id));
+        }
+      } catch {
+        // Invalid JSON, ignore
+      }
+    }
   }, []);
 
   // Persist notifications to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
   }, [notifications]);
+
+  // Persist seen notification IDs to localStorage
+  const persistSeenNotificationIds = useCallback(() => {
+    const ids = Array.from(seenWebAppNotificationIDsRef.current);
+    // Keep only the most recent 100 IDs to prevent storage bloat
+    const recentIds = ids.slice(-100);
+    localStorage.setItem(SEEN_NOTIFICATION_IDS_KEY, JSON.stringify(recentIds));
+  }, []);
 
   const pushNotification = useCallback((notification: CompletionNotification) => {
     let inserted = false;
@@ -170,6 +191,9 @@ function AppLayout() {
   const clearAllNotifications = useCallback(() => {
     setNotifications([]);
     localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+    // Also clear seen notification IDs so old notifications can appear again if needed
+    seenWebAppNotificationIDsRef.current.clear();
+    localStorage.removeItem(SEEN_NOTIFICATION_IDS_KEY);
   }, []);
 
   const dismissNotification = useCallback((id: string) => {
@@ -415,6 +439,7 @@ function AppLayout() {
         return;
       }
       seenWebAppNotificationIDsRef.current.add(detail.id);
+      persistSeenNotificationIds();
       pushNotification({
         id: detail.id,
         sessionId: detail.sessionId,
@@ -435,7 +460,7 @@ function AppLayout() {
     return () => {
       window.removeEventListener(webAppNotificationEventName, onWebAppNotification as EventListener);
     };
-  }, [playNotificationAudio, pushNotification]);
+  }, [playNotificationAudio, pushNotification, persistSeenNotificationIds]);
 
   useEffect(() => {
     if (!newestNotificationID) {
