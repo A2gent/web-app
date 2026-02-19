@@ -17,6 +17,7 @@ interface SidebarProps {
   onTitleChange: (title: string) => void;
   onNavigate?: () => void;
   notificationCount?: number;
+  refreshKey?: number;
 }
 
 interface NavSection {
@@ -46,7 +47,7 @@ const navSections: NavSection[] = [
   },
 ];
 
-function Sidebar({ title, onTitleChange, onNavigate, notificationCount = 0 }: SidebarProps) {
+function Sidebar({ title, onTitleChange, onNavigate, notificationCount = 0, refreshKey }: SidebarProps) {
   const location = useLocation();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(title);
@@ -82,7 +83,7 @@ function Sidebar({ title, onTitleChange, onNavigate, notificationCount = 0 }: Si
 
   useEffect(() => {
     loadProjects();
-  }, [loadProjects]);
+  }, [loadProjects, refreshKey]);
 
   const commitTitleEdit = () => {
     onTitleChange(titleDraft);

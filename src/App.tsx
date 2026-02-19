@@ -95,6 +95,7 @@ function AppLayout() {
   const [newestNotificationID, setNewestNotificationID] = useState<string | null>(null);
   const [toastNotifications, setToastNotifications] = useState<CompletionNotification[]>([]);
   const toastTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const [backendRefreshKey, setBackendRefreshKey] = useState(0);
 
   const isSidebarOpen = isMobile ? isMobileSidebarOpen : isDesktopSidebarOpen;
 
@@ -102,6 +103,21 @@ function AppLayout() {
     const name = await fetchAgentName();
     setAppTitle(name);
   }, []);
+
+  const handleBackendChange = useCallback(async () => {
+    // Clear notifications — they belong to the previous backend
+    setNotifications([]);
+    setToastNotifications([]);
+    localStorage.removeItem('a2gent.notifications');
+    // Reset session polling state so completion detection starts fresh
+    previousSessionSignatureRef.current = new Map();
+    hasInitializedCompletionPollRef.current = false;
+    seenWebAppNotificationIDsRef.current = new Set();
+    localStorage.removeItem('a2gent.seen-notification-ids');
+    // Reload projects list in sidebar and refresh agent name
+    setBackendRefreshKey(k => k + 1);
+    await refreshAgentName();
+  }, [refreshAgentName]);
 
   useEffect(() => {
     void refreshAgentName();
@@ -587,6 +603,7 @@ function AppLayout() {
           onTitleChange={handleAppTitleChange} 
           onNavigate={handleSidebarNavigate}
           notificationCount={notifications.length}
+          refreshKey={backendRefreshKey}
         />
       </div>
 
@@ -694,7 +711,7 @@ function AppLayout() {
           <Route path="/tools" element={<ToolsView />} />
           <Route path="/notifications" element={<NotificationsView notifications={notifications} onClearAll={clearAllNotifications} onDismiss={dismissNotification} />} />
           <Route path="/skills" element={<SkillsView />} />
-          <Route path="/settings" element={<SettingsView onAgentNameRefresh={refreshAgentName} />} />
+          <Route path="/settings" element={<SettingsView onAgentNameRefresh={handleBackendChange} />} />
           <Route path="/projects/:projectId" element={<ProjectView />} />
         </Routes>
       </div>
