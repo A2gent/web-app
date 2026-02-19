@@ -117,6 +117,26 @@ function AppLayout() {
     };
   }, []);
 
+  const NOTIFICATIONS_STORAGE_KEY = 'a2gent.notifications';
+
+  // Load notifications from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setNotifications(parsed);
+      } catch {
+        // Invalid JSON, ignore
+      }
+    }
+  }, []);
+
+  // Persist notifications to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
+  }, [notifications]);
+
   const pushNotification = useCallback((notification: CompletionNotification) => {
     let inserted = false;
     setNotifications((prev) => {
@@ -124,7 +144,7 @@ function AppLayout() {
         return prev;
       }
       inserted = true;
-      return [notification, ...prev].slice(0, 6);
+      return [notification, ...prev].slice(0, 50); // Max 50 notifications stored
     });
 
     if (!inserted) {
@@ -145,6 +165,15 @@ function AppLayout() {
     }, 10000); // 10 seconds
     
     toastTimeoutsRef.current.set(notification.id, timeoutId);
+  }, []);
+
+  const clearAllNotifications = useCallback(() => {
+    setNotifications([]);
+    localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+  }, []);
+
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
 
   const stopOtherNotificationAudio = useCallback((exceptID: string) => {
@@ -628,7 +657,7 @@ function AppLayout() {
           <Route path="/providers/fallback-aggregates/new" element={<FallbackAggregateCreateView />} />
           <Route path="/providers/:providerType" element={<ProviderEditView />} />
           <Route path="/tools" element={<ToolsView />} />
-          <Route path="/notifications" element={<NotificationsView />} />
+          <Route path="/notifications" element={<NotificationsView notifications={notifications} onClearAll={clearAllNotifications} onDismiss={dismissNotification} />} />
           <Route path="/skills" element={<SkillsView />} />
           <Route path="/settings" element={<SettingsView />} />
           <Route path="/projects/:projectId" element={<ProjectView />} />
