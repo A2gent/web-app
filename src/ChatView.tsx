@@ -4,11 +4,13 @@ import ChatInput from './ChatInput';
 import MessageList from './MessageList';
 import QuestionPrompt from './QuestionPrompt';
 import { EmptyState, EmptyStateTitle, EmptyStateHint } from './EmptyState';
+import { TaskProgressModal } from './TaskProgressModal';
 import { 
   getSession, 
   cancelSessionRun,
   listProviders,
   getProject,
+  parseTaskProgress,
   sendMessageStream,
   getPendingQuestion,
   answerQuestion,
@@ -160,6 +162,7 @@ function ChatView() {
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [questionAnswer, setQuestionAnswer] = useState<string>('');
   const [projectName, setProjectName] = useState<string | null>(null);
+  const [showTaskProgressModal, setShowTaskProgressModal] = useState(false);
 
   const SESSION_POLL_INTERVAL_MS = 2000; // Poll every 2 seconds for active sessions
   
@@ -544,6 +547,21 @@ function ChatView() {
                     Routed to {routedTarget}
                   </span>
                 ) : null}
+                {session.task_progress && (() => {
+                  const progress = parseTaskProgress(session.task_progress);
+                  if (progress.total > 0) {
+                    return (
+                      <button
+                        className="session-task-progress session-provider-chip"
+                        title={`${progress.completed}/${progress.total} tasks completed (${progress.progressPct}%) - Click to view details`}
+                        onClick={() => setShowTaskProgressModal(true)}
+                      >
+                        📋 {progress.completed}/{progress.total} ({progress.progressPct}%)
+                      </button>
+                    );
+                  }
+                  return null;
+                })()}
                 {(session.input_tokens ?? 0) > 0 || (session.output_tokens ?? 0) > 0 ? (
                   <>
                     <span 
@@ -642,6 +660,14 @@ function ChatView() {
           </span>
         ) : null}
       />
+
+      {showTaskProgressModal && session && (
+        <TaskProgressModal
+          sessionId={session.id}
+          sessionTitle={session.title || 'Untitled Session'}
+          onClose={() => setShowTaskProgressModal(false)}
+        />
+      )}
     </>
   );
 }

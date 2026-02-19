@@ -124,6 +124,7 @@ export interface Session {
   current_context_tokens?: number;
   model_context_window?: number;
   run_duration_seconds?: number;
+  task_progress?: string;
   created_at: string;
   updated_at: string;
   messages?: Message[];
@@ -588,6 +589,51 @@ export async function getSession(sessionId: string): Promise<Session> {
     throw new Error(`Failed to get session: ${response.statusText}`);
   }
   return response.json();
+}
+
+export interface TaskProgressResponse {
+  content: string;
+  total_tasks: number;
+  completed_tasks: number;
+  progress_pct: number;
+}
+
+export async function getSessionTaskProgress(sessionId: string): Promise<TaskProgressResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/task-progress`);
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to get task progress');
+  }
+  return response.json();
+}
+
+export interface TaskProgressStats {
+  total: number;
+  completed: number;
+  progressPct: number;
+}
+
+export function parseTaskProgress(content?: string): TaskProgressStats {
+  if (!content) {
+    return { total: 0, completed: 0, progressPct: 0 };
+  }
+
+  const lines = content.split('\n');
+  let total = 0;
+  let completed = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('[ ]')) {
+      total++;
+    } else if (trimmed.startsWith('[x]') || trimmed.startsWith('[X]')) {
+      total++;
+      completed++;
+    }
+  }
+
+  const progressPct = total > 0 ? Math.round((completed * 100) / total) : 0;
+
+  return { total, completed, progressPct };
 }
 
 export async function createSession(request: CreateSessionRequest = {}): Promise<CreateSessionResponse> {

@@ -1,0 +1,184 @@
+.task-progress-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.task-progress-modal {
+  background: var(--bg-color, #1e1e1e);
+  border-radius: 12px;
+  max-width: 700px;
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-color, #333);
+}
+
+.task-progress-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.task-progress-modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-color, #e0e0e0);
+}
+
+.task-progress-close-btn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.task-progress-close-btn:hover {
+  background: var(--hover-bg, rgba(255, 255, 255, 0.1));
+  color: var(--text-color, #e0e0e0);
+}
+
+.task-progress-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.task-progress-loading,
+.task-progress-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted, #888);
+}
+
+.task-progress-error {
+  background: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.3);
+  border-radius: 8px;
+  padding: 16px;
+  color: #ff3b30;
+}
+
+.task-progress-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.task-progress-stat {
+  background: var(--card-bg, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.task-progress-stat-value {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--accent-color, #007aff);
+  margin-bottom: 4px;
+}
+
+.task-progress-stat-label {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.task-progress-content {
+  background: var(--code-bg, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 16px;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.task-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: var(--text-color, #e0e0e0);
+}
+
+.task-item {
+  padding: 4px 0;
+}
+
+.task-text {
+  color: var(--text-muted, #888);
+  font-style: italic;
+}
+
+.task-checkbox {
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  line-height: 1.5;
+  user-select: none;
+}
+
+.task-completed .task-checkbox {
+  color: #34c759;
+}
+
+.task-text-content {
+  flex: 1;
+}
+
+.task-strikethrough {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.task-completed {
+  opacity: 0.8;
+}
+
+/* Scrollbar styling */
+.task-progress-modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.task-progress-modal-body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.task-progress-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.task-progress-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

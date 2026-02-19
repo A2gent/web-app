@@ -7,6 +7,7 @@ import {
   listProjects,
   listProviders,
   listSessions,
+  parseTaskProgress,
   startSession,
   type LLMProviderType,
   type Project,
@@ -14,6 +15,7 @@ import {
   type Session,
 } from './api';
 import { EmptyState, EmptyStateTitle, EmptyStateHint } from './EmptyState';
+import { TaskProgressModal } from './TaskProgressModal';
 
 const LAST_PROVIDER_STORAGE_KEY = 'a2gent.sessions.lastProvider';
 
@@ -35,6 +37,7 @@ function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) 
   const [selectedProvider, setSelectedProvider] = useState<LLMProviderType | ''>('');
   const [hasLoadedProviders, setHasLoadedProviders] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [taskProgressModalSession, setTaskProgressModalSession] = useState<Session | null>(null);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -335,12 +338,32 @@ function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) 
                         <div className="session-meta">
                           {session.provider ? <span className="session-provider-chip">{session.provider}</span> : null}
                           {!isQueued && (
-                            <span
-                              className="session-token-count"
-                              title={`Ran for ${formatDurationSeconds(session.run_duration_seconds ?? 0)}`}
-                            >
-                              {formatTokenCount(session.total_tokens ?? 0)}
-                            </span>
+                            <>
+                              {session.task_progress && (() => {
+                                const progress = parseTaskProgress(session.task_progress);
+                                if (progress.total > 0) {
+                                  return (
+                                    <button
+                                      className="session-task-progress"
+                                      title={`${progress.completed}/${progress.total} tasks completed (${progress.progressPct}%) - Click to view details`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setTaskProgressModalSession(session);
+                                      }}
+                                    >
+                                      📋 {progress.completed}/{progress.total}
+                                    </button>
+                                  );
+                                }
+                                return null;
+                              })()}
+                              <span
+                                className="session-token-count"
+                                title={`Ran for ${formatDurationSeconds(session.run_duration_seconds ?? 0)}`}
+                              >
+                                {formatTokenCount(session.total_tokens ?? 0)}
+                              </span>
+                            </>
                           )}
                           <span className="session-date">{formatDate(session.updated_at)}</span>
                         </div>
@@ -425,6 +448,14 @@ function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) 
           </div>
         </div>
       </div>
+
+      {taskProgressModalSession && (
+        <TaskProgressModal
+          sessionId={taskProgressModalSession.id}
+          sessionTitle={formatSessionTitle(taskProgressModalSession)}
+          onClose={() => setTaskProgressModalSession(null)}
+        />
+      )}
     </div>
   );
 }
