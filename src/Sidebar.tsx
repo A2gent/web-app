@@ -111,12 +111,29 @@ function Sidebar({ title, onTitleChange, onNavigate, notificationCount = 0 }: Si
     }
   };
 
+  // Sort projects: KB first, then user projects (agent is shown in Agent section)
+  const sortedProjects = useCallback(() => {
+    const kbProject = projects.find(p => p.id === SYSTEM_PROJECT_KB_ID);
+    const userProjects = projects.filter(
+      p => p.id !== SYSTEM_PROJECT_KB_ID && p.id !== SYSTEM_PROJECT_AGENT_ID
+    );
+
+    const result: Project[] = [];
+    if (kbProject) result.push(kbProject);
+    result.push(...userProjects);
+
+    return result;
+  }, [projects]);
+
   // Helper to get project icon based on system status
   const getProjectIcon = (project: Project) => {
     if (project.id === SYSTEM_PROJECT_KB_ID) return '🧠';
     if (project.id === SYSTEM_PROJECT_AGENT_ID) return '🤖';
     return '📁';
   };
+
+  // Check if agent project is active
+  const isAgentProjectActive = location.pathname.startsWith(`/projects/${SYSTEM_PROJECT_AGENT_ID}`);
 
   return (
     <div className="sidebar">
@@ -156,7 +173,7 @@ function Sidebar({ title, onTitleChange, onNavigate, notificationCount = 0 }: Si
         <div className="nav-section">
           <div className="nav-section-header">📂 Projects</div>
           <ul className="nav-list">
-            {projects.map(project => (
+            {sortedProjects().map(project => (
               <li key={project.id} className="nav-item">
                 <Link
                   to={`/projects/${project.id}`}
@@ -227,6 +244,18 @@ function Sidebar({ title, onTitleChange, onNavigate, notificationCount = 0 }: Si
                   </Link>
                 </li>
               ))}
+              {/* Source code link in Agent section */}
+              {section.id === 'agent' && (
+                <li className="nav-item">
+                  <Link
+                    to={`/projects/${SYSTEM_PROJECT_AGENT_ID}`}
+                    className={`nav-link ${isAgentProjectActive ? 'active' : ''}`}
+                    onClick={onNavigate}
+                  >
+                    📁 Source code
+                  </Link>
+                </li>
+              )}
               {/* Notifications in Agent section */}
               {section.id === 'agent' && (
                 <li className="nav-item">
