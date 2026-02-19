@@ -2354,21 +2354,21 @@ body.mind-resizing * {
   cursor: help;
 }
 
-.session-task-progress {
-  background: none;
-  border: none;
-  color: #a5a5a5;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: all 0.2s;
-  font-family: inherit;
+.session-task-progress-bar {
+  width: 50px;
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
-.session-task-progress:hover {
-  background: rgba(0, 122, 255, 0.1);
-  color: #007aff;
+.session-task-progress-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #4caf50, #8bc34a);
+  border-radius: 2px;
+  transition: width 0.3s ease;
 }
 
 .session-card .session-delete-btn,

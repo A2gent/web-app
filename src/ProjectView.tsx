@@ -16,6 +16,7 @@ import {
   listProviders,
   listSessions,
   moveProjectFile,
+  parseTaskProgress,
   renameProjectEntry,
   saveProjectFile,
   startSession,
@@ -1875,7 +1876,20 @@ function ProjectView() {
                         </div>
                         <div className="session-row-right">
                           <div className="session-meta">
-                            {session.provider ? <span className="session-provider-chip">{session.provider}</span> : null}
+                            {session.task_progress && (() => {
+                              const progress = parseTaskProgress(session.task_progress);
+                              if (progress.total > 0) {
+                                return (
+                                  <span
+                                    className="session-task-progress-bar"
+                                    title={`${progress.completed}/${progress.total} tasks (${progress.progressPct}%)`}
+                                  >
+                                    <span className="session-task-progress-fill" style={{ width: `${progress.progressPct}%` }} />
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
                             <span
                               className="session-token-count"
                               title={`Ran for ${formatDurationSeconds(session.run_duration_seconds ?? 0)}`}

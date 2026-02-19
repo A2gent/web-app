@@ -336,23 +336,18 @@ function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) 
                       </div>
                       <div className="session-row-right">
                         <div className="session-meta">
-                          {session.provider ? <span className="session-provider-chip">{session.provider}</span> : null}
                           {!isQueued && (
                             <>
                               {session.task_progress && (() => {
                                 const progress = parseTaskProgress(session.task_progress);
                                 if (progress.total > 0) {
                                   return (
-                                    <button
-                                      className="session-task-progress"
-                                      title={`${progress.completed}/${progress.total} tasks completed (${progress.progressPct}%) - Click to view details`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setTaskProgressModalSession(session);
-                                      }}
+                                    <span
+                                      className="session-task-progress-bar"
+                                      title={`${progress.completed}/${progress.total} tasks (${progress.progressPct}%)`}
                                     >
-                                      📋 {progress.completed}/{progress.total}
-                                    </button>
+                                      <span className="session-task-progress-fill" style={{ width: `${progress.progressPct}%` }} />
+                                    </span>
                                   );
                                 }
                                 return null;

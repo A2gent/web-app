@@ -538,11 +538,16 @@ function ChatView() {
                     </>
                   ) : null}
                   <span className="session-title">{session.title || 'Untitled Session'}</span>
-                {session.provider ? <span className="session-provider-chip">{session.provider}</span> : null}
-                {session.model ? <span className="session-provider-chip">{session.model}</span> : null}
-                {session.provider === 'automatic_router' && routedTarget ? (
-                  <span className="session-provider-chip session-routed-chip" title={`Routed target: ${routedTarget}`}>
-                    Routed to {routedTarget}
+                {session.provider ? (
+                  <span 
+                    className="session-provider-chip" 
+                    title={session.provider === 'automatic_router' && routedTarget 
+                      ? `Provider: ${session.provider} → ${routedTarget}` 
+                      : `Provider: ${session.provider}`}
+                  >
+                    {session.provider === 'automatic_router' && routedTarget 
+                      ? `→ ${routedTarget}` 
+                      : session.provider}
                   </span>
                 ) : null}
                 {session.task_progress ? (
