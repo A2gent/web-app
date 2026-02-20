@@ -15,6 +15,7 @@ import {
   completeAnthropicOAuth,
   getAnthropicOAuthStatus,
   disconnectAnthropicOAuth,
+  testProvider,
   type FallbackChainNode,
   type LLMProviderType,
   type ProviderConfig,
@@ -38,6 +39,7 @@ function ProviderEditView() {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -510,6 +512,22 @@ function ProviderEditView() {
       setError(err instanceof Error ? err.message : 'Failed to disconnect OAuth');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    if (!providerType) return;
+    try {
+      setIsTesting(true);
+      setError(null);
+      setSuccess(null);
+      const result = await testProvider(providerType);
+      setSuccess(result.message);
+    } catch (err) {
+      console.error('Failed to test provider:', err);
+      setError(err instanceof Error ? err.message : 'Failed to test provider');
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -991,6 +1009,16 @@ function ProviderEditView() {
             >
               Set active
             </button>
+            {!isFallback && !isAutomaticRouter ? (
+              <button
+                type="button"
+                className="settings-add-btn"
+                onClick={handleTest}
+                disabled={isTesting || !selected.configured}
+              >
+                {isTesting ? 'Testing...' : 'Test'}
+              </button>
+            ) : null}
             {isFallback ? (
               <button
                 type="button"

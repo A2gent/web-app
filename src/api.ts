@@ -1758,6 +1758,22 @@ export async function listAnthropicModels(): Promise<string[]> {
   return data.models;
 }
 
+export interface ProviderTestResponse {
+  success: boolean;
+  message: string;
+}
+
+export async function testProvider(providerType: LLMProviderType): Promise<ProviderTestResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/providers/${encodeURIComponent(providerType)}/test`, {
+    method: 'POST',
+  });
+  const data: ProviderTestResponse = await response.json();
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || `Failed to test provider: ${response.statusText}`);
+  }
+  return data;
+}
+
 // --- Integrations API ---
 
 export async function listIntegrations(): Promise<Integration[]> {
