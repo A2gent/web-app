@@ -5,17 +5,19 @@ import MessageList from './MessageList';
 import QuestionPrompt from './QuestionPrompt';
 import { EmptyState, EmptyStateTitle, EmptyStateHint } from './EmptyState';
 import { TaskProgressPanel } from './TaskProgressPanel';
-import { 
-  getSession, 
+import {
+  getSession,
   cancelSessionRun,
   listProviders,
   getProject,
   sendMessageStream,
   getPendingQuestion,
   answerQuestion,
+  updateSessionProvider,
+  listProviderModels,
   type LLMProviderType,
   type ProviderConfig,
-  type Session, 
+  type Session,
   type Message,
   type ChatStreamEvent,
   type PendingQuestion,
@@ -161,6 +163,11 @@ function ChatView() {
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [questionAnswer, setQuestionAnswer] = useState<string>('');
   const [projectName, setProjectName] = useState<string | null>(null);
+  const [showModelSwitcher, setShowModelSwitcher] = useState(false);
+  const [switcherProvider, setSwitcherProvider] = useState<LLMProviderType>('');
+  const [switcherModel, setSwitcherModel] = useState<string>('');
+  const [switcherModels, setSwitcherModels] = useState<string[]>([]);
+  const [isSwitchingModel, setIsSwitchingModel] = useState(false);
 
   const SESSION_POLL_INTERVAL_MS = 2000; // Poll every 2 seconds for active sessions
   
@@ -230,6 +237,36 @@ function ChatView() {
     };
     loadProviders();
   }, []);
+
+  // Load available models when model switcher is opened and provider is selected
+  useEffect(() => {
+    if (!showModelSwitcher || !switcherProvider) {
+      setSwitcherModels([]);
+      return;
+    }
+
+    const loadModels = async () => {
+      try {
+        const models = await listProviderModels(switcherProvider);
+        setSwitcherModels(models);
+      } catch (err) {
+        console.error('Failed to load models:', err);
+        setSwitcherModels([]);
+      }
+    };
+
+    void loadModels();
+  }, [showModelSwitcher, switcherProvider]);
+
+  // Initialize switcher values when opening
+  useEffect(() => {
+    if (showModelSwitcher && session) {
+      const currentProvider = session.provider || '';
+      const currentModel = session.model || '';
+      setSwitcherProvider(currentProvider);
+      setSwitcherModel(currentModel);
+    }
+  }, [showModelSwitcher, session]);
 
   // Poll active sessions for real-time updates
   // This handles:
@@ -515,6 +552,27 @@ function ChatView() {
     setQuestionAnswer(answer);
   };
 
+  const handleSwitchModel = async () => {
+    if (!session || !switcherProvider) return;
+
+    setIsSwitchingModel(true);
+    try {
+      const updated = await updateSessionProvider(
+        session.id,
+        switcherProvider,
+        switcherModel || undefined
+      );
+      setSession(updated);
+      setShowModelSwitcher(false);
+      setError(null);
+    } catch (err) {
+      console.error('Failed to switch model:', err);
+      setError(err instanceof Error ? err.message : 'Failed to switch model');
+    } finally {
+      setIsSwitchingModel(false);
+    }
+  };
+
   const isActiveRequest = Boolean(session && activeRequestSessionId === session.id);
   const inputDisabled = isLoading && !session;
 
@@ -539,16 +597,18 @@ function ChatView() {
                   ) : null}
                   <span className="session-title">{session.title || 'Untitled Session'}</span>
                 {session.provider ? (
-                  <span 
-                    className="session-provider-chip" 
-                    title={session.provider === 'automatic_router' && routedTarget 
-                      ? `Provider: ${session.provider} → ${routedTarget}` 
-                      : `Provider: ${session.provider}`}
+                  <button
+                    className="session-provider-chip"
+                    onClick={() => setShowModelSwitcher(true)}
+                    title={session.provider === 'automatic_router' && routedTarget
+                      ? `Provider: ${session.provider} → ${routedTarget}. Click to switch model`
+                      : `Provider: ${session.provider}${session.model ? ` / ${session.model}` : ''}. Click to switch model`}
                   >
-                    {session.provider === 'automatic_router' && routedTarget 
-                      ? `→ ${routedTarget}` 
+                    {session.provider === 'automatic_router' && routedTarget
+                      ? `→ ${routedTarget}`
                       : session.provider}
-                  </span>
+                    {session.provider !== 'automatic_router' && session.model ? ` / ${session.model}` : ''}
+                  </button>
                 ) : null}
                 {(session.input_tokens ?? 0) > 0 || (session.output_tokens ?? 0) > 0 ? (
                   <>
@@ -654,6 +714,70 @@ function ChatView() {
         ) : null}
       />
 
+      {showModelSwitcher && (
+        <div className="modal-overlay" onClick={() => setShowModelSwitcher(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Switch Model</h3>
+              <button className="modal-close" onClick={() => setShowModelSwitcher(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Provider</label>
+                <select
+                  value={switcherProvider}
+                  onChange={(e) => setSwitcherProvider(e.target.value as LLMProviderType)}
+                >
+                  <option value="">Select provider...</option>
+                  {providers.map((provider) => (
+                    <option key={provider.type} value={provider.type}>
+                      {provider.display_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Model</label>
+                <select
+                  value={switcherModel}
+                  onChange={(e) => setSwitcherModel(e.target.value)}
+                  disabled={!switcherProvider || switcherModels.length === 0}
+                >
+                  <option value="">{switcherModels.length === 0 ? 'Enter model manually or select...' : 'Select model...'}</option>
+                  {switcherModels.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={switcherModel}
+                  onChange={(e) => setSwitcherModel(e.target.value)}
+                  placeholder="Or type model name..."
+                  className="model-input"
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn-secondary"
+                onClick={() => setShowModelSwitcher(false)}
+                disabled={isSwitchingModel}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleSwitchModel}
+                disabled={!switcherProvider || isSwitchingModel}
+              >
+                {isSwitchingModel ? 'Switching...' : 'Switch Model'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

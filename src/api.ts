@@ -769,6 +769,20 @@ export async function updateSessionProject(sessionId: string, projectId?: string
   return response.json();
 }
 
+export async function updateSessionProvider(sessionId: string, provider: string, model?: string): Promise<Session> {
+  const response = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}/provider`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ provider, model: model ?? null }),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to update session provider');
+  }
+  return response.json();
+}
+
 export async function listProjects(): Promise<Project[]> {
   const response = await fetch(`${getApiBaseUrl()}/projects`);
   if (!response.ok) {
@@ -1756,6 +1770,26 @@ export async function listAnthropicModels(): Promise<string[]> {
   }
   const data: ProviderModelsResponse = await response.json();
   return data.models;
+}
+
+export async function listProviderModels(providerType: LLMProviderType): Promise<string[]> {
+  const normalized = providerType.toLowerCase().trim();
+  switch (normalized) {
+    case 'lmstudio':
+      return listLMStudioModels();
+    case 'kimi':
+      return listKimiModels();
+    case 'google':
+      return listGoogleModels();
+    case 'openai':
+      return listOpenAIModels();
+    case 'openrouter':
+      return listOpenRouterModels();
+    case 'anthropic':
+      return listAnthropicModels();
+    default:
+      throw new Error(`Unsupported provider: ${providerType}`);
+  }
 }
 
 export interface ProviderTestResponse {
