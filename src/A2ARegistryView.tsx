@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { listIntegrations } from './api';
+import {
+  clearStoredLocalA2AAgentID,
+  fetchRegistrySelfAgent,
+  getStoredA2ARegistryURL,
+  getStoredLocalA2AAgentID,
+  storeLocalA2AAgentID,
+} from './a2aIdentity';
 
 const A2A_REGISTRY_URL_KEY = 'a2gent.a2a_registry_url';
-const DEFAULT_REGISTRY_URL = 'http://localhost:5174';
 
 function getRegistryUrl(): string {
-  const stored = localStorage.getItem(A2A_REGISTRY_URL_KEY);
-  return stored && stored.trim() !== '' ? stored.trim() : DEFAULT_REGISTRY_URL;
+  return getStoredA2ARegistryURL();
 }
 
 function saveRegistryUrl(url: string): void {
@@ -129,6 +135,7 @@ function agentTypeLabel(type: AgentType) {
 
 function A2ARegistryView() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [registryUrl, setRegistryUrl] = useState(getRegistryUrl);
   const [urlDraft, setUrlDraft] = useState(getRegistryUrl);
   const [isEditingUrl, setIsEditingUrl] = useState(false);
@@ -141,6 +148,36 @@ function A2ARegistryView() {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<AgentType | ''>('');
   const [filterStatus, setFilterStatus] = useState<AgentStatus | ''>('');
+  const [localAgentID, setLocalAgentID] = useState<string>(getStoredLocalA2AAgentID());
+
+  useEffect(() => {
+    const prefilled = searchParams.get('agent_id')?.trim();
+    if (!prefilled) {
+      return;
+    }
+    setSearch(prefilled);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const resolveSelfAgentID = async () => {
+      try {
+        const integrations = await listIntegrations();
+        const integration = integrations.find(i => i.provider === 'a2_registry');
+        const apiKey = integration?.config?.api_key?.trim() || '';
+        if (!apiKey) {
+          clearStoredLocalA2AAgentID();
+          setLocalAgentID('');
+          return;
+        }
+        const me = await fetchRegistrySelfAgent(registryUrl, apiKey);
+        storeLocalA2AAgentID(me.id);
+        setLocalAgentID(me.id);
+      } catch {
+        // Keep the last known value; non-fatal for listing.
+      }
+    };
+    void resolveSelfAgentID();
+  }, [registryUrl]);
 
   const commitUrl = () => {
     const normalized = urlDraft.trim().replace(/\/$/, '');
@@ -201,7 +238,7 @@ function A2ARegistryView() {
   return (
     <div className="page-shell">
       <div className="page-header">
-        <h1>🌐 A2A Registry</h1>
+        <h1>🌐 A2 Registry</h1>
       </div>
 
       <div className="page-content page-content-narrow">
@@ -209,50 +246,59 @@ function A2ARegistryView() {
           Browse and discover agents registered on the Square A2A network. Connect to a local or remote registry to list available agents and their capabilities.
         </p>
 
-        {/* Registry URL */}
-        <section className="settings-group" style={{ marginBottom: 24 }}>
-          <div className="integration-form-title-row">
-            <h3 style={{ margin: 0 }}>Registry URL</h3>
+        <section className="a2a-config-block">
+          {/* Registry URL */}
+          <div className="settings-group" style={{ marginBottom: 16 }}>
+            <div className="integration-form-title-row">
+              <h3 style={{ margin: 0 }}>Registry URL</h3>
+            </div>
+
+            {isEditingUrl ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                <input
+                  type="text"
+                  value={urlDraft}
+                  onChange={e => setUrlDraft(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') commitUrl();
+                    if (e.key === 'Escape') {
+                      setUrlDraft(registryUrl);
+                      setIsEditingUrl(false);
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                  placeholder="http://localhost:5174"
+                  autoFocus
+                />
+                <button type="button" className="settings-add-btn" onClick={commitUrl}>Save</button>
+                <button type="button" className="settings-remove-btn" onClick={() => { setUrlDraft(registryUrl); setIsEditingUrl(false); }}>Cancel</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                <code style={{ flex: 1, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '6px 10px', color: 'var(--primary)', fontSize: '0.9em' }}>
+                  {registryUrl}
+                </code>
+                <button type="button" className="settings-add-btn" onClick={() => { setUrlDraft(registryUrl); setIsEditingUrl(true); }}>
+                  Edit
+                </button>
+              </div>
+            )}
           </div>
 
-          {isEditingUrl ? (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-              <input
-                type="text"
-                value={urlDraft}
-                onChange={e => setUrlDraft(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') commitUrl();
-                  if (e.key === 'Escape') {
-                    setUrlDraft(registryUrl);
-                    setIsEditingUrl(false);
-                  }
-                }}
-                style={{ flex: 1 }}
-                placeholder="http://localhost:5174"
-                autoFocus
-              />
-              <button type="button" className="settings-add-btn" onClick={commitUrl}>Save</button>
-              <button type="button" className="settings-remove-btn" onClick={() => { setUrlDraft(registryUrl); setIsEditingUrl(false); }}>Cancel</button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-              <code style={{ flex: 1, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '6px 10px', color: 'var(--primary)', fontSize: '0.9em' }}>
-                {registryUrl}
-              </code>
-              <button type="button" className="settings-add-btn" onClick={() => { setUrlDraft(registryUrl); setIsEditingUrl(true); }}>
-                Edit
-              </button>
+          {localAgentID && (
+            <div className="a2a-identity-inline">
+              <span>Your connected agent ID:</span>
+              <code>{localAgentID}</code>
             </div>
           )}
         </section>
 
         {/* Filters */}
-        <section className="settings-group" style={{ marginBottom: 20 }}>
+        <section className="a2a-config-block">
           <div className="integration-form-title-row">
             <h3 style={{ margin: 0 }}>Filters</h3>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginTop: 10 }}>
             <label className="settings-field" style={{ gap: 4 }}>
               <span>Name</span>
               <input
@@ -327,55 +373,56 @@ function A2ARegistryView() {
                 No agents match the current filters.
               </div>
             ) : (
-              <div className="mcp-server-list">
+              <div className="a2a-agent-list">
                 {agents.map(agent => (
-                  <article key={agent.id} className="integration-card mcp-server-card">
-                    <div className="integration-card-headline">
-                      <div className="integration-card-title-wrap">
-                        <h3 style={{ display: 'flex', alignItems: 'center' }}>
+                  <article key={agent.id} className="a2a-agent-row">
+                    <div className="a2a-agent-main">
+                      <div className="a2a-agent-left">
+                        <h3 className="a2a-agent-name">
                           {statusDot(agent.status)}
                           {agent.name}
                         </h3>
-                        <span className="integration-mode-chip">{agentTypeLabel(agent.agent_type)}</span>
-                        <span className="integration-mode-chip">{agent.visibility}</span>
-                        {agent.price_per_request > 0 && (
-                          <span className="integration-mode-chip">
-                            ${agent.price_per_request.toFixed(3)}/{agent.currency} per request
-                          </span>
+                        <details className="a2a-agent-details">
+                          <summary>Details</summary>
+                          <div className="a2a-agent-chips">
+                            <span className="integration-mode-chip">{agentTypeLabel(agent.agent_type)}</span>
+                            <span className="integration-mode-chip">{agent.visibility}</span>
+                            {agent.price_per_request > 0 && (
+                              <span className="integration-mode-chip">
+                                ${agent.price_per_request.toFixed(3)}/{agent.currency}
+                              </span>
+                            )}
+                          </div>
+                          {agent.description && (
+                            <p>{agent.description}</p>
+                          )}
+                          <div className="a2a-agent-meta">
+                            <code>id: {agent.id}</code>
+                            <span>Registered {new Date(agent.created_at).toLocaleDateString()}</span>
+                          </div>
+                        </details>
+                      </div>
+                      <div className="a2a-agent-actions">
+                        {agent.id === localAgentID ? (
+                          <button
+                            type="button"
+                            className="settings-add-btn"
+                            title="This is your connected local agent"
+                            disabled
+                          >
+                            Current agent
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="settings-add-btn"
+                            title="Contact this agent"
+                            onClick={() => navigate(`/a2a/contact/${encodeURIComponent(agent.id)}`, { state: { agent } })}
+                          >
+                            Contact agent
+                          </button>
                         )}
                       </div>
-                      <span className="integration-updated">
-                        Registered {new Date(agent.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-
-                    {agent.description && (
-                      <p style={{ margin: '8px 0 10px', color: 'var(--text-2)', fontSize: '0.9em', lineHeight: 1.5 }}>
-                        {agent.description}
-                      </p>
-                    )}
-
-                    <div className="mcp-server-meta" style={{ marginBottom: 8 }}>
-                      <code style={{ fontSize: '0.78em', color: 'var(--text-2)' }}>id: {agent.id}</code>
-                    </div>
-
-                    <div className="integration-card-actions">
-                      <button
-                        type="button"
-                        className="settings-add-btn"
-                        title="Contact this agent"
-                        onClick={() => navigate(`/a2a/contact/${encodeURIComponent(agent.id)}`, { state: { agent } })}
-                      >
-                        Contact agent
-                      </button>
-                      <button
-                        type="button"
-                        className="settings-add-btn"
-                        title="View pricing (coming soon)"
-                        disabled
-                      >
-                        Pricing
-                      </button>
                     </div>
                   </article>
                 ))}

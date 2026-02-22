@@ -48,13 +48,23 @@ const navSections: NavSection[] = [
   },
   {
     id: 'a2a',
-    label: '🌐 A2A',
+    label: '🌐 A2 Network',
     items: [
-      { id: 'a2a-registry', label: '📡 Registry', path: '/a2a' },
+      { id: 'a2a-registry', label: '📡 A2 Registry', path: '/a2a' },
       { id: 'a2a-my-agent', label: '🤖 My agent', path: '/a2a/my-agent' },
     ],
   },
 ];
+
+function isNavItemActive(pathname: string, itemPath: string): boolean {
+  if (itemPath === '/a2a') {
+    return pathname === '/a2a' || pathname.startsWith('/a2a/contact/');
+  }
+  if (itemPath === '/agent/jobs') {
+    return pathname === '/agent/jobs' || pathname.startsWith('/agent/jobs/');
+  }
+  return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
+}
 
 function Sidebar({ title, onTitleChange, onNavigate, notificationCount = 0, refreshKey }: SidebarProps) {
   const location = useLocation();
@@ -244,7 +254,7 @@ function Sidebar({ title, onTitleChange, onNavigate, notificationCount = 0, refr
                 <li key={item.id} className="nav-item">
                   <Link
                     to={item.path}
-                    className={`nav-link ${location.pathname.startsWith(item.path) ? 'active' : ''}`}
+                    className={`nav-link ${isNavItemActive(location.pathname, item.path) ? 'active' : ''}`}
                     onClick={onNavigate}
                   >
                     {item.label}

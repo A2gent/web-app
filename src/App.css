@@ -3500,6 +3500,164 @@ body.mind-resizing * {
   margin-bottom: 22px;
 }
 
+.a2a-config-block {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.a2a-identity-inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 0.86em;
+}
+
+.a2a-identity-inline code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  color: var(--text-1);
+}
+
+.a2a-inline-link-btn {
+  text-decoration: none;
+  font-size: 0.78em;
+  padding: 2px 8px;
+}
+
+.a2a-agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.a2a-agent-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface-1);
+}
+
+.a2a-agent-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.a2a-agent-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.a2a-agent-name {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-size: 0.97em;
+}
+
+.a2a-agent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.a2a-agent-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.a2a-agent-details {
+  margin-top: 4px;
+  color: var(--text-2);
+}
+
+.a2a-agent-details summary {
+  cursor: pointer;
+  font-size: 0.82em;
+}
+
+.a2a-agent-details p {
+  margin: 8px 0 0;
+  font-size: 0.88em;
+  line-height: 1.45;
+}
+
+.a2a-agent-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.8em;
+}
+
+.a2a-log-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 11px;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.92em;
+  color: var(--text-2);
+  max-height: 220px;
+  overflow-y: auto;
+  line-height: 1.55;
+}
+
+.a2a-log-empty {
+  font-style: italic;
+}
+
+.a2a-log-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.a2a-log-time {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.a2a-log-message {
+  color: var(--text-2);
+}
+
+.a2a-log-line-error .a2a-log-message {
+  color: #f25f5c;
+}
+
+.a2a-log-line-warn .a2a-log-message {
+  color: #e6b450;
+}
+
+.a2a-log-line-ok .a2a-log-message {
+  color: #4caf82;
+}
+
+.a2a-log-line-info .a2a-log-message {
+  color: #8aa1c1;
+}
+
+@media (max-width: 820px) {
+  .a2a-agent-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .a2a-agent-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
 .settings-field {
   display: flex;
   flex-direction: column;

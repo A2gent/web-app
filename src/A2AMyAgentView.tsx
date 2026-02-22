@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   createIntegration,
   getA2ATunnelStatus,
@@ -16,6 +17,13 @@ import {
   type TunnelState,
   type TunnelStatus,
 } from './api';
+import {
+  clearStoredLocalA2AAgentID,
+  fetchRegistrySelfAgent,
+  getStoredA2ARegistryURL,
+  getStoredLocalA2AAgentID,
+  storeLocalA2AAgentID,
+} from './a2aIdentity';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -84,36 +92,39 @@ function tunnelStateLabel(state: TunnelState): string {
   return 'Disconnected — agent is not reachable via A2A.';
 }
 
+function formatLogTime24(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
+function logLevelClass(message: string): string {
+  const normalized = message.toLowerCase();
+  if (normalized.includes('error') || normalized.includes('fail')) return 'a2a-log-line-error';
+  if (normalized.includes('warn') || normalized.includes('disconnect')) return 'a2a-log-line-warn';
+  if (normalized.includes('connect') || normalized.includes('started') || normalized.includes('ready')) return 'a2a-log-line-ok';
+  return 'a2a-log-line-info';
+}
+
 // ---------------------------------------------------------------------------
 // Connection log panel
 // ---------------------------------------------------------------------------
 
 function ConnectionLog({ entries, logRef }: { entries: TunnelLogEntry[]; logRef: React.RefObject<HTMLDivElement | null> }) {
   return (
-    <div
-      ref={logRef}
-      style={{
-        background: 'var(--surface-2)',
-        border: '1px solid var(--border)',
-        borderRadius: 6,
-        padding: '8px 10px',
-        fontFamily: 'monospace',
-        fontSize: '0.78em',
-        color: 'var(--text-2)',
-        maxHeight: 200,
-        overflowY: 'auto',
-        lineHeight: 1.6,
-      }}
-    >
+    <div ref={logRef} className="a2a-log-panel">
       {entries.length === 0 ? (
-        <span style={{ fontStyle: 'italic' }}>No log entries yet.</span>
+        <span className="a2a-log-empty">No log entries yet.</span>
       ) : (
         entries.map((e, i) => (
-          <div key={i}>
-            <span style={{ color: 'var(--text-3)', marginRight: 8 }}>
-              {new Date(e.time).toLocaleTimeString()}
+          <div key={i} className={`a2a-log-line ${logLevelClass(e.message)}`}>
+            <span className="a2a-log-time">
+              {formatLogTime24(e.time)}
             </span>
-            {e.message}
+            <span className="a2a-log-message">{e.message}</span>
           </div>
         ))
       )}
@@ -154,6 +165,8 @@ function A2AMyAgentView() {
   // Inbound sessions
   const [inboundSessions, setInboundSessions] = useState<Session[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [localAgentID, setLocalAgentID] = useState<string>(getStoredLocalA2AAgentID());
+  const [localAgentIDError, setLocalAgentIDError] = useState<string | null>(null);
 
   // Derived
   const isConfigured = Boolean(integration?.config?.api_key);
@@ -258,6 +271,31 @@ function A2AMyAgentView() {
     return () => stopSSE();
   }, [loadIntegration, loadProjectsAndSettings, loadTunnelStatus, loadInboundSessions, startSSE, stopSSE]);
 
+  useEffect(() => {
+    const resolveAgentIDFromRegistry = async () => {
+      const apiKey = integration?.config?.api_key?.trim() || '';
+      if (!apiKey) {
+        clearStoredLocalA2AAgentID();
+        setLocalAgentID('');
+        setLocalAgentIDError(null);
+        return;
+      }
+      const registryURL = getStoredA2ARegistryURL();
+      try {
+        const me = await fetchRegistrySelfAgent(registryURL, apiKey);
+        storeLocalA2AAgentID(me.id);
+        setLocalAgentID(me.id);
+        setLocalAgentIDError(null);
+      } catch (err) {
+        clearStoredLocalA2AAgentID();
+        setLocalAgentID('');
+        const message = err instanceof Error ? err.message : String(err);
+        setLocalAgentIDError(`Could not resolve agent ID from registry (${message}).`);
+      }
+    };
+    void resolveAgentIDFromRegistry();
+  }, [integration?.config?.api_key]);
+
   // Poll tunnel status every 5s to update the state dot
   useEffect(() => {
     const id = setInterval(() => void loadTunnelStatus(), 5000);
@@ -306,6 +344,16 @@ function A2AMyAgentView() {
       setGrpcAddrInput('');
       setWsUrlInput('');
       setIsEditingKey(false);
+      try {
+        const me = await fetchRegistrySelfAgent(getStoredA2ARegistryURL(), key);
+        storeLocalA2AAgentID(me.id);
+        setLocalAgentID(me.id);
+        setLocalAgentIDError(null);
+      } catch {
+        clearStoredLocalA2AAgentID();
+        setLocalAgentID('');
+        setLocalAgentIDError('Connected, but could not fetch your agent ID from registry.');
+      }
       setSuccess('Agent connected to the A2A network.');
       await loadIntegration();
       void loadTunnelStatus();
@@ -350,6 +398,9 @@ function A2AMyAgentView() {
       setApiKeyInput('');
       setGrpcAddrInput('');
       setWsUrlInput('');
+      clearStoredLocalA2AAgentID();
+      setLocalAgentID('');
+      setLocalAgentIDError(null);
       setSuccess('Disconnected from the A2A network.');
       await loadIntegration();
       void loadTunnelStatus();
@@ -397,7 +448,7 @@ function A2AMyAgentView() {
 
   function renderConnectForm(isReplace: boolean) {
     return (
-      <section className="settings-group" style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <section className="settings-group a2a-config-block" style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <h3 style={{ margin: 0 }}>{isReplace ? 'Replace credentials' : 'Connect to A2A network'}</h3>
 
         {!isReplace && (
@@ -492,7 +543,7 @@ function A2AMyAgentView() {
       ? (integration?.config?.square_ws_url ?? '—')
       : (integration?.config?.square_grpc_addr ?? '—');
     return (
-      <section className="settings-group" style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <section className="settings-group a2a-config-block" style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <h3 style={{ margin: 0 }}>Connection</h3>
 
         {/* Status row */}
@@ -543,13 +594,28 @@ function A2AMyAgentView() {
           <button type="button" className="settings-add-btn" onClick={startEditKey} disabled={saving}>Replace credentials</button>
           <button type="button" className="settings-remove-btn" onClick={() => void handleDisconnect()} disabled={saving}>Disconnect</button>
         </div>
+
+        {localAgentID && (
+          <div className="a2a-identity-inline">
+            <span>Connected as:</span>
+            <code>{localAgentID}</code>
+            <Link className="settings-add-btn a2a-inline-link-btn" to={`/a2a?agent_id=${encodeURIComponent(localAgentID)}`}>
+              View in registry
+            </Link>
+          </div>
+        )}
+        {!localAgentID && localAgentIDError && (
+          <p className="settings-help" style={{ margin: 0 }}>
+            {localAgentIDError}
+          </p>
+        )}
       </section>
     );
   }
 
   function renderConnectionLog() {
     return (
-      <section className="settings-group" style={{ marginBottom: 24 }}>
+      <section className="settings-group a2a-config-block" style={{ marginBottom: 24 }}>
         <h3 style={{ margin: '0 0 8px' }}>Connection log</h3>
         <ConnectionLog entries={logEntries} logRef={logRef} />
       </section>
@@ -558,12 +624,13 @@ function A2AMyAgentView() {
 
   function renderInboundProjectPicker() {
     return (
-      <section className="settings-group" style={{ marginBottom: 24 }}>
+      <section className="settings-group a2a-config-block" style={{ marginBottom: 24 }}>
         <h3 style={{ margin: '0 0 4px' }}>Base project for inbound sessions</h3>
         <p className="settings-help" style={{ marginBottom: 10 }}>
           Inbound A2A requests will be assigned to this project. Leave empty for no project.
         </p>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label className="settings-field" style={{ gap: 6 }}>
+          <span>Project</span>
           <select
             value={inboundProjectID}
             onChange={e => {
@@ -571,22 +638,21 @@ function A2AMyAgentView() {
               void handleSaveInboundProject(e.target.value);
             }}
             disabled={savingProject}
-            style={{ flex: 1 }}
           >
             <option value="">— No project —</option>
             {projects.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-          {savingProject && <span style={{ fontSize: '0.82em', color: 'var(--text-2)' }}>Saving…</span>}
-        </div>
+        </label>
+        {savingProject && <span style={{ fontSize: '0.82em', color: 'var(--text-2)' }}>Saving…</span>}
       </section>
     );
   }
 
   function renderInboundSessions() {
     return (
-      <section>
+      <section className="a2a-config-block">
         <div className="integration-form-title-row" style={{ marginBottom: 4 }}>
           <h3 style={{ margin: 0 }}>Inbound sessions</h3>
           <button
