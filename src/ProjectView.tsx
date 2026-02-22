@@ -1267,6 +1267,9 @@ function ProjectView() {
       setSelectedCommitFileDiff('');
       setCommitMessage('');
       setIsCommitDialogOpen(true);
+      if ((status.files || []).length > 0) {
+        void handleGenerateCommitMessage(repoPath, true);
+      }
     } catch (gitError) {
       setError(gitError instanceof Error ? gitError.message : 'Failed to load git status');
     }
@@ -1338,11 +1341,14 @@ function ProjectView() {
     }
   };
 
-  const handleGenerateCommitMessage = async () => {
-    if (!projectId || isCommitting || isGeneratingCommitMessage) return;
+  const handleGenerateCommitMessage = async (repoPathOverride?: string, hasFilesOverride?: boolean) => {
+    if (!projectId || isCommitting || isPushing || isGeneratingCommitMessage) return;
+    const hasFiles = hasFilesOverride ?? (commitDialogFiles.length > 0);
+    if (!hasFiles) return;
+    const targetRepoPath = repoPathOverride ?? commitRepoPath;
     setIsGeneratingCommitMessage(true);
     try {
-      const suggestion = await generateProjectGitCommitMessage(projectId, commitRepoPath);
+      const suggestion = await generateProjectGitCommitMessage(projectId, targetRepoPath);
       if (suggestion && suggestion.trim() !== '') {
         setCommitMessage(suggestion.trim());
       }
