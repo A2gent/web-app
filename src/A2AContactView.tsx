@@ -19,6 +19,7 @@ type ContactLocationState = {
     name?: string;
     description?: string;
   };
+  forceNewSession?: boolean;
 };
 
 function A2AContactView() {
@@ -38,6 +39,7 @@ function A2AContactView() {
     }
     return '';
   }, [locationState.agent, targetAgentID]);
+  const forceNewSession = locationState.forceNewSession === true;
 
   useEffect(() => {
     if (!targetAgentID) {
@@ -51,7 +53,7 @@ function A2AContactView() {
         setError(null);
         const storageKey = `${A2A_CONTACT_SESSION_KEY_PREFIX}:${targetAgentID}`;
         const existingSessionID = localStorage.getItem(storageKey)?.trim() || '';
-        if (existingSessionID) {
+        if (!forceNewSession && existingSessionID) {
           try {
             const existing = await getSession(existingSessionID);
             if (
@@ -90,7 +92,7 @@ function A2AContactView() {
     return () => {
       cancelled = true;
     };
-  }, [targetAgentID, targetAgentName]);
+  }, [targetAgentID, targetAgentName, forceNewSession]);
 
   const handleSendMessage = async (message: string) => {
     if (!session) return;

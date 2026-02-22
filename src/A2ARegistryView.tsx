@@ -404,23 +404,33 @@ function A2ARegistryView() {
                       </div>
                       <div className="a2a-agent-actions">
                         {agent.id === localAgentID ? (
-                          <button
-                            type="button"
-                            className="settings-add-btn"
+                          <span
                             title="This is your connected local agent"
-                            disabled
+                            style={{
+                              color: 'var(--text-2)',
+                              fontSize: '0.9em',
+                              whiteSpace: 'nowrap',
+                              border: 'none',
+                              background: 'transparent',
+                              padding: 0,
+                              margin: 0,
+                            }}
                           >
-                            Current agent
-                          </button>
+                            🎉 Current agent
+                          </span>
                         ) : (
-                          <button
-                            type="button"
-                            className="settings-add-btn"
-                            title="Contact this agent"
-                            onClick={() => navigate(`/a2a/contact/${encodeURIComponent(agent.id)}`, { state: { agent } })}
-                          >
-                            Contact agent
-                          </button>
+                      <button
+                        type="button"
+                        className="settings-add-btn"
+                        title="Contact this agent"
+                        onClick={() =>
+                          navigate(`/a2a/contact/${encodeURIComponent(agent.id)}`, {
+                            state: { agent, forceNewSession: true },
+                          })
+                        }
+                      >
+                        Contact agent
+                      </button>
                         )}
                       </div>
                     </div>
