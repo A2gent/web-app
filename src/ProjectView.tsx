@@ -6,6 +6,7 @@ import {
   commitProjectGit,
   createProjectFolder,
   createSession,
+  discardProjectGitFile,
   deleteProject,
   deleteProjectFile,
   deleteSession,
@@ -446,6 +447,7 @@ function ProjectView() {
   const [isGeneratingCommitMessage, setIsGeneratingCommitMessage] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
   const commitDiffRequestRef = useRef(0);
+  const [gitDiscardPath, setGitDiscardPath] = useState<string | null>(null);
 
   // Sessions state
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -1349,6 +1351,29 @@ function ProjectView() {
       setError(gitError instanceof Error ? gitError.message : 'Failed to update file staging');
     } finally {
       setGitFileActionPath(null);
+    }
+  };
+
+  const handleDiscardGitFileChanges = async (file: ProjectGitChangedFile) => {
+    if (!projectId || isCommitting || isPushing || gitDiscardPath === file.path) return;
+    const confirmed = window.confirm(`Discard all changes in "${file.path}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setError(null);
+    setGitDiscardPath(file.path);
+    try {
+      await discardProjectGitFile(projectId, file.path, commitRepoPath);
+      await refreshCommitDialogFiles();
+      await loadGitStatus();
+      if (selectedCommitFilePath === file.path) {
+        const remaining = commitDialogFiles.filter((f) => f.path !== file.path);
+        setSelectedCommitFilePath(remaining[0]?.path || '');
+        setSelectedCommitFileDiff('');
+      }
+    } catch (discardError) {
+      setError(discardError instanceof Error ? discardError.message : 'Failed to discard file changes');
+    } finally {
+      setGitDiscardPath(null);
     }
   };
 
@@ -2430,6 +2455,18 @@ function ProjectView() {
                           : file.staged
                             ? 'Remove'
                             : 'Add'}
+                      </button>
+                      <button
+                        type="button"
+                        className="project-commit-discard-btn"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDiscardGitFileChanges(file);
+                        }}
+                        disabled={isCommitting || isPushing || gitDiscardPath === file.path}
+                        title="Discard changes in this file"
+                      >
+                        {gitDiscardPath === file.path ? 'Discarding...' : 'Discard'}
                       </button>
                     </div>
                   ))

@@ -6339,6 +6339,26 @@ input[type="checkbox"]:disabled {
   cursor: not-allowed;
 }
 
+.project-commit-discard-btn {
+  border: 1px solid #6f4a4a;
+  background: #2a1a1a;
+  color: #efb6b6;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.project-commit-discard-btn:hover:not(:disabled) {
+  border-color: #c87272;
+}
+
+.project-commit-discard-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .project-commit-diff {
   border: 1px solid #2c3443;
   border-radius: 8px;

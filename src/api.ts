@@ -1620,6 +1620,19 @@ export async function unstageProjectGitFile(projectID: string, path: string, rep
   }
 }
 
+export async function discardProjectGitFile(projectID: string, path: string, repoPath = ''): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/projects/git/discard?projectID=${encodeURIComponent(projectID)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ path, repo_path: repoPath }),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to discard file changes');
+  }
+}
+
 export async function getProjectGitFileDiff(projectID: string, path: string, repoPath = ''): Promise<ProjectGitFileDiffResponse> {
   const repoQuery = repoPath.trim() === '' ? '' : `&repoPath=${encodeURIComponent(repoPath)}`;
   const response = await fetch(
