@@ -637,13 +637,13 @@ function A2AMyAgentView() {
 
                 <div className="integration-card-actions" style={{ marginTop: 8 }}>
                   <a
-                    href={`/sessions/${sess.id}`}
+                    href={`/chat/${sess.id}`}
                     className="settings-add-btn"
                     style={{ textDecoration: 'none', display: 'inline-block' }}
                     onClick={e => {
                       e.preventDefault();
                       // Navigate via React Router if available, otherwise direct
-                      window.location.href = `/sessions/${sess.id}`;
+                      window.location.href = `/chat/${sess.id}`;
                     }}
                   >
                     Open session

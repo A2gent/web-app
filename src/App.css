@@ -3494,8 +3494,8 @@ body.mind-resizing * {
 }
 
 .settings-group {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   margin-bottom: 22px;
 }
@@ -3688,10 +3688,6 @@ body.mind-resizing * {
   border-radius: 8px;
   padding: 14px;
   margin-bottom: 16px;
-}
-
-.settings-audio-panel .settings-group {
-  grid-template-columns: 1fr;
 }
 
 .settings-audio-panel h3 {
@@ -6026,7 +6022,7 @@ input[type="checkbox"]:disabled {
 }
 
 .project-commit-dialog {
-  width: min(720px, 92vw);
+  width: min(1240px, 96vw);
 }
 
 .project-commit-summary {
@@ -6077,9 +6073,9 @@ input[type="checkbox"]:disabled {
 
 .project-commit-content {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.2fr);
+  grid-template-columns: minmax(360px, 1fr) minmax(520px, 1.6fr);
   gap: 10px;
-  min-height: 320px;
+  min-height: 420px;
 }
 
 .project-commit-empty {
@@ -6205,15 +6201,38 @@ input[type="checkbox"]:disabled {
   line-height: 1.4;
   color: #d7deea;
   overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: pre;
+  word-break: normal;
   flex: 1;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 }
 
 .project-commit-diff-empty {
   padding: 12px;
   color: #8b95a7;
   font-size: 13px;
+}
+
+.project-commit-diff-line {
+  white-space: pre;
+}
+
+.project-commit-diff-line.meta {
+  color: #8ea3c5;
+}
+
+.project-commit-diff-line.hunk {
+  color: #b8a6f0;
+}
+
+.project-commit-diff-line.add {
+  background: rgba(47, 145, 79, 0.22);
+  color: #b7f1c5;
+}
+
+.project-commit-diff-line.remove {
+  background: rgba(163, 63, 63, 0.2);
+  color: #f3bbbb;
 }
 
 .project-delete-btn {

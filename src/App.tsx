@@ -697,6 +697,7 @@ function AppLayout() {
         <Routes>
           <Route path="/" element={<Navigate to={`/projects/${SYSTEM_PROJECT_KB_ID}`} replace />} />
           {/* Legacy routes - redirect to project routes */}
+          <Route path="/sessions/:sessionId" element={<ChatView />} />
           <Route path="/sessions" element={<Navigate to={`/projects/${SYSTEM_PROJECT_KB_ID}`} replace />} />
           <Route path="/agent/sessions" element={<Navigate to={`/projects/${SYSTEM_PROJECT_AGENT_ID}`} replace />} />
           <Route path="/my-mind" element={<Navigate to={`/projects/${SYSTEM_PROJECT_KB_ID}`} replace />} />

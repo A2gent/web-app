@@ -1350,7 +1350,17 @@ function ProjectView() {
     try {
       const suggestion = await generateProjectGitCommitMessage(projectId, targetRepoPath);
       if (suggestion && suggestion.trim() !== '') {
-        setCommitMessage(suggestion.trim());
+        const trimmedSuggestion = suggestion.trim();
+        setCommitMessage((prev) => {
+          const current = prev.trim();
+          if (current === '') {
+            return trimmedSuggestion;
+          }
+          if (current.includes(trimmedSuggestion)) {
+            return prev;
+          }
+          return `${prev.trimEnd()}\n${trimmedSuggestion}`;
+        });
       }
     } catch {
       // Intentionally ignore generation failures and keep current message unchanged.
@@ -1388,18 +1398,49 @@ function ProjectView() {
     }
   };
 
-  const handlePushChanges = async () => {
-    if (!projectId || isPushing || isCommitting) return;
+  const handleCommitAndPushChanges = async () => {
+    if (!projectId || isCommitting || isPushing) return;
+
+    const message = commitMessage.trim();
+    if (message === '') {
+      setError('Commit message is required.');
+      return;
+    }
+
     setError(null);
     setSuccess(null);
+    setIsCommitting(true);
     setIsPushing(true);
     try {
-      const output = await pushProjectGit(projectId, commitRepoPath);
-      setSuccess(output ? `Push completed: ${output}` : 'Push completed.');
+      const commitResult = await commitProjectGit(projectId, message, commitRepoPath);
+      await pushProjectGit(projectId, commitRepoPath);
+      setSuccess(`Committed ${commitResult.files_committed} file(s) and pushed ${commitResult.commit}.`);
+      setCommitMessage('');
+      setIsCommitDialogOpen(false);
+      setCommitDialogFiles([]);
+      setSelectedCommitFilePath('');
+      setSelectedCommitFileDiff('');
+      setGitFileActionPath(null);
       await loadGitStatus();
-    } catch (pushError) {
-      setError(pushError instanceof Error ? pushError.message : 'Failed to push');
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : 'Failed to commit and push';
+      const normalized = messageText.toLowerCase();
+      if (normalized.includes('no staged files to commit')) {
+        try {
+          const pushOutput = await pushProjectGit(projectId, commitRepoPath);
+          setSuccess(pushOutput ? `No new commit. Push completed: ${pushOutput}` : 'No new commit. Push completed.');
+          await loadGitStatus();
+          await refreshCommitDialogFiles();
+        } catch (pushErr) {
+          setError(pushErr instanceof Error ? pushErr.message : 'Failed to push');
+        }
+      } else {
+        setError(messageText);
+        await loadGitStatus();
+        await refreshCommitDialogFiles();
+      }
     } finally {
+      setIsCommitting(false);
       setIsPushing(false);
     }
   };
@@ -2327,7 +2368,7 @@ function ProjectView() {
               onChange={(event) => setCommitMessage(event.target.value)}
               placeholder="Commit message"
               rows={4}
-              disabled={isCommitting || isPushing || isGeneratingCommitMessage}
+              disabled={isCommitting || isPushing}
             />
             <div className="project-commit-controls">
               <button
@@ -2420,18 +2461,18 @@ function ProjectView() {
               <button
                 type="button"
                 className="settings-add-btn"
-                onClick={() => void handlePushChanges()}
-                disabled={isPushing || isCommitting}
+                onClick={() => void handleCommitChanges()}
+                disabled={isCommitting || isPushing || commitMessage.trim() === '' || stagedCommitFilesCount === 0}
               >
-                {isPushing ? 'Pushing...' : 'Push'}
+                {isCommitting && !isPushing ? 'Committing...' : 'Commit'}
               </button>
               <button
                 type="button"
                 className="settings-save-btn"
-                onClick={() => void handleCommitChanges()}
+                onClick={() => void handleCommitAndPushChanges()}
                 disabled={isCommitting || isPushing || commitMessage.trim() === '' || stagedCommitFilesCount === 0}
               >
-                {isCommitting ? 'Committing...' : 'Commit'}
+                {isCommitting && isPushing ? 'Committing & pushing...' : 'Commit & Push'}
               </button>
               <button type="button" className="settings-remove-btn" onClick={closeCommitDialog} disabled={isCommitting || isPushing}>
                 Cancel
