@@ -11,6 +11,8 @@ import {
   deleteSession,
   getProject,
   getProjectFile,
+  generateProjectGitCommitMessage,
+  getProjectGitFileDiff,
   getProjectGitStatus,
   getSession,
   getSettings,
@@ -437,6 +439,10 @@ function ProjectView() {
   const [commitMessage, setCommitMessage] = useState('');
   const [isCommitting, setIsCommitting] = useState(false);
   const [gitFileActionPath, setGitFileActionPath] = useState<string | null>(null);
+  const [selectedCommitFilePath, setSelectedCommitFilePath] = useState('');
+  const [selectedCommitFileDiff, setSelectedCommitFileDiff] = useState('');
+  const [isLoadingCommitFileDiff, setIsLoadingCommitFileDiff] = useState(false);
+  const [isGeneratingCommitMessage, setIsGeneratingCommitMessage] = useState(false);
 
   // Sessions state
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -1254,6 +1260,9 @@ function ProjectView() {
       setCommitRepoPath(repoPath);
       setCommitRepoLabel(repoLabel);
       setCommitDialogFiles(status.files || []);
+      const firstPath = (status.files || [])[0]?.path || '';
+      setSelectedCommitFilePath(firstPath);
+      setSelectedCommitFileDiff('');
       setCommitMessage('');
       setIsCommitDialogOpen(true);
     } catch (gitError) {
@@ -1268,12 +1277,43 @@ function ProjectView() {
     setCommitRepoPath('');
     setCommitRepoLabel('');
     setGitFileActionPath(null);
+    setSelectedCommitFilePath('');
+    setSelectedCommitFileDiff('');
+    setIsGeneratingCommitMessage(false);
   };
 
   const refreshCommitDialogFiles = useCallback(async () => {
     if (!projectId) return;
     const status = await getProjectGitStatus(projectId, commitRepoPath);
-    setCommitDialogFiles(status.files || []);
+    const files = status.files || [];
+    setCommitDialogFiles(files);
+    if (files.length === 0) {
+      setSelectedCommitFilePath('');
+      setSelectedCommitFileDiff('');
+      return;
+    }
+    const hasSelected = selectedCommitFilePath !== '' && files.some((file) => file.path === selectedCommitFilePath);
+    if (!hasSelected) {
+      setSelectedCommitFilePath(files[0].path);
+      setSelectedCommitFileDiff('');
+    }
+  }, [projectId, commitRepoPath, selectedCommitFilePath]);
+
+  const loadCommitFileDiff = useCallback(async (path: string) => {
+    if (!projectId || path.trim() === '') {
+      setSelectedCommitFileDiff('');
+      return;
+    }
+    setIsLoadingCommitFileDiff(true);
+    try {
+      const diffResponse = await getProjectGitFileDiff(projectId, path, commitRepoPath);
+      setSelectedCommitFileDiff(diffResponse.preview || 'No diff available for this file.');
+    } catch (diffError) {
+      setSelectedCommitFileDiff('Failed to load diff preview.');
+      setError(diffError instanceof Error ? diffError.message : 'Failed to load diff preview');
+    } finally {
+      setIsLoadingCommitFileDiff(false);
+    }
   }, [projectId, commitRepoPath]);
 
   const handleToggleGitFileStage = async (file: ProjectGitChangedFile) => {
@@ -1295,6 +1335,21 @@ function ProjectView() {
     }
   };
 
+  const handleGenerateCommitMessage = async () => {
+    if (!projectId || isCommitting || isGeneratingCommitMessage) return;
+    setIsGeneratingCommitMessage(true);
+    try {
+      const suggestion = await generateProjectGitCommitMessage(projectId, commitRepoPath);
+      if (suggestion && suggestion.trim() !== '') {
+        setCommitMessage(suggestion.trim());
+      }
+    } catch {
+      // Intentionally ignore generation failures and keep current message unchanged.
+    } finally {
+      setIsGeneratingCommitMessage(false);
+    }
+  };
+
   const handleCommitChanges = async () => {
     if (!projectId) return;
 
@@ -1313,6 +1368,9 @@ function ProjectView() {
       setCommitMessage('');
       setIsCommitDialogOpen(false);
       setCommitDialogFiles([]);
+      setSelectedCommitFilePath('');
+      setSelectedCommitFileDiff('');
+      setGitFileActionPath(null);
       await loadGitStatus();
     } catch (commitError) {
       setError(commitError instanceof Error ? commitError.message : 'Failed to commit changes');
@@ -1345,6 +1403,15 @@ function ProjectView() {
   const hasUnsavedChanges = selectedFileContent !== savedFileContent;
   const markdownHtml = useMemo(() => renderMarkdownToHtml(selectedFileContent), [selectedFileContent]);
   const stagedCommitFilesCount = commitDialogFiles.filter((file) => file.staged).length;
+
+  useEffect(() => {
+    if (!isCommitDialogOpen) return;
+    if (!selectedCommitFilePath) {
+      setSelectedCommitFileDiff('');
+      return;
+    }
+    void loadCommitFileDiff(selectedCommitFilePath);
+  }, [isCommitDialogOpen, selectedCommitFilePath, loadCommitFileDiff]);
   
   const selectedFilePathNormalized = normalizeMindPath(selectedFilePath);
   const selectedFileAbsolutePath = rootFolder && selectedFilePath
@@ -2234,38 +2301,72 @@ function ProjectView() {
               onChange={(event) => setCommitMessage(event.target.value)}
               placeholder="Commit message"
               rows={4}
-              disabled={isCommitting}
+              disabled={isCommitting || isGeneratingCommitMessage}
             />
-            <div className="project-commit-files">
-              {commitDialogFiles.length === 0 ? (
-                <div className="project-commit-empty">Working tree is clean.</div>
-              ) : (
-                commitDialogFiles.map((file) => (
-                  <div
-                    key={`${file.status}-${file.path}`}
-                    className={`project-commit-file ${file.staged ? 'staged' : 'unstaged'} ${file.untracked ? 'untracked' : ''}`}
-                  >
-                    <code className="project-commit-status">{file.status || '??'}</code>
-                    <span className="project-commit-path">{file.path}</span>
-                    <span className={`project-commit-state-badge ${file.staged ? 'staged' : 'not-staged'}`}>
-                      {file.staged ? 'Staged' : 'Not staged'}
-                    </span>
-                    {file.untracked ? <span className="project-commit-state-badge untracked">Untracked</span> : null}
-                    <button
-                      type="button"
-                      className="project-commit-toggle-btn"
-                      onClick={() => void handleToggleGitFileStage(file)}
-                      disabled={isCommitting || gitFileActionPath === file.path}
+            <div className="project-commit-controls">
+              <button
+                type="button"
+                className="settings-add-btn"
+                onClick={() => void handleGenerateCommitMessage()}
+                disabled={isCommitting || isGeneratingCommitMessage || commitDialogFiles.length === 0}
+              >
+                {isGeneratingCommitMessage ? 'Generating...' : 'Suggest message'}
+              </button>
+            </div>
+            <div className="project-commit-content">
+              <div className="project-commit-files">
+                {commitDialogFiles.length === 0 ? (
+                  <div className="project-commit-empty">Working tree is clean.</div>
+                ) : (
+                  commitDialogFiles.map((file) => (
+                    <div
+                      key={`${file.status}-${file.path}`}
+                      className={`project-commit-file ${file.staged ? 'staged' : 'unstaged'} ${file.untracked ? 'untracked' : ''} ${selectedCommitFilePath === file.path ? 'selected' : ''}`}
+                      onClick={() => setSelectedCommitFilePath(file.path)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedCommitFilePath(file.path);
+                        }
+                      }}
                     >
-                      {gitFileActionPath === file.path
-                        ? 'Updating...'
-                        : file.staged
-                          ? 'Remove'
-                          : 'Add'}
-                    </button>
-                  </div>
-                ))
-              )}
+                      <code className="project-commit-status">{file.status || '??'}</code>
+                      <span className="project-commit-path">{file.path}</span>
+                      <span className={`project-commit-state-badge ${file.staged ? 'staged' : 'not-staged'}`}>
+                        {file.staged ? 'Staged' : 'Not staged'}
+                      </span>
+                      {file.untracked ? <span className="project-commit-state-badge untracked">Untracked</span> : null}
+                      <button
+                        type="button"
+                        className="project-commit-toggle-btn"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleToggleGitFileStage(file);
+                        }}
+                        disabled={isCommitting || gitFileActionPath === file.path}
+                      >
+                        {gitFileActionPath === file.path
+                          ? 'Updating...'
+                          : file.staged
+                            ? 'Remove'
+                            : 'Add'}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="project-commit-diff">
+                <div className="project-commit-diff-header">
+                  {selectedCommitFilePath || 'Select a file'}
+                </div>
+                {isLoadingCommitFileDiff ? (
+                  <div className="project-commit-diff-empty">Loading diff...</div>
+                ) : (
+                  <pre className="project-commit-diff-body">{selectedCommitFileDiff || 'No diff preview.'}</pre>
+                )}
+              </div>
             </div>
             <div className="mind-picker-actions">
               <button

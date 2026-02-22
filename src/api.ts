@@ -1558,6 +1558,11 @@ export interface ProjectGitCommitResponse {
   files_committed: number;
 }
 
+export interface ProjectGitFileDiffResponse {
+  path: string;
+  preview: string;
+}
+
 export async function getProjectGitStatus(projectID: string, repoPath = ''): Promise<ProjectGitStatusResponse> {
   const repoQuery = repoPath.trim() === '' ? '' : `&repoPath=${encodeURIComponent(repoPath)}`;
   const response = await fetch(`${getApiBaseUrl()}/projects/git/status?projectID=${encodeURIComponent(projectID)}${repoQuery}`);
@@ -1605,6 +1610,38 @@ export async function unstageProjectGitFile(projectID: string, path: string, rep
   if (!response.ok) {
     throw await buildApiError(response, 'Failed to unstage file');
   }
+}
+
+export async function getProjectGitFileDiff(projectID: string, path: string, repoPath = ''): Promise<ProjectGitFileDiffResponse> {
+  const repoQuery = repoPath.trim() === '' ? '' : `&repoPath=${encodeURIComponent(repoPath)}`;
+  const response = await fetch(
+    `${getApiBaseUrl()}/projects/git/diff?projectID=${encodeURIComponent(projectID)}&path=${encodeURIComponent(path)}${repoQuery}`,
+  );
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to load file diff');
+  }
+  return response.json();
+}
+
+export async function generateProjectGitCommitMessage(projectID: string, repoPath = ''): Promise<string | null> {
+  const response = await fetch(`${getApiBaseUrl()}/projects/git/commit-message?projectID=${encodeURIComponent(projectID)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ repo_path: repoPath }),
+  });
+
+  if (response.status === 204) {
+    return null;
+  }
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = await response.json() as { message?: string };
+  const message = typeof data.message === 'string' ? data.message.trim() : '';
+  return message !== '' ? message : null;
 }
 
 export async function getProjectFile(projectID: string, path: string): Promise<MindFileResponse> {
