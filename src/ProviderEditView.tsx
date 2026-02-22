@@ -6,6 +6,7 @@ import {
   listKimiModels,
   listLMStudioModels,
   listOpenAIModels,
+  listOpenAICodexModels,
   listOpenRouterModels,
   listAnthropicModels,
   listProviders,
@@ -15,6 +16,9 @@ import {
   completeAnthropicOAuth,
   getAnthropicOAuthStatus,
   disconnectAnthropicOAuth,
+  importOpenAICodexOAuth,
+  getOpenAICodexOAuthStatus,
+  disconnectOpenAICodexOAuth,
   testProvider,
   type FallbackChainNode,
   type LLMProviderType,
@@ -30,7 +34,7 @@ function isFallbackProvider(type?: string): boolean {
 }
 
 function isModelQueryableProvider(type: LLMProviderType): boolean {
-  return type === 'lmstudio' || type === 'kimi' || type === 'google' || type === 'openai' || type === 'openrouter' || type === 'anthropic';
+  return type === 'lmstudio' || type === 'kimi' || type === 'google' || type === 'openai' || type === 'openai_codex' || type === 'openrouter' || type === 'anthropic';
 }
 
 function ProviderEditView() {
@@ -74,6 +78,8 @@ function ProviderEditView() {
   const [oauthAuthCode, setOAuthAuthCode] = useState('');
   const [oauthVerifier, setOAuthVerifier] = useState('');
   const [isOAuthFlow, setIsOAuthFlow] = useState(false);
+  const [codexOAuthEnabled, setCodexOAuthEnabled] = useState(false);
+  const [codexOAuthExpiresAt, setCodexOAuthExpiresAt] = useState<number | null>(null);
 
   const selected = useMemo(
     () => providers.find((provider) => provider.type === providerType),
@@ -85,6 +91,7 @@ function ProviderEditView() {
   const isKimi = selected?.type === 'kimi';
   const isGoogle = selected?.type === 'google';
   const isOpenAI = selected?.type === 'openai';
+  const isOpenAICodex = selected?.type === 'openai_codex';
   const isOpenRouter = selected?.type === 'openrouter';
   const isAnthropic = selected?.type === 'anthropic';
   const isFallback = isFallbackProvider(selected?.type);
@@ -119,6 +126,8 @@ function ProviderEditView() {
         (await listGoogleModels(provider.base_url)).forEach((name) => options.add(name));
       } else if (provider.type === 'openai') {
         (await listOpenAIModels(provider.base_url)).forEach((name) => options.add(name));
+      } else if (provider.type === 'openai_codex') {
+        (await listOpenAICodexModels(provider.base_url)).forEach((name) => options.add(name));
       } else if (provider.type === 'openrouter') {
         (await listOpenRouterModels(provider.base_url)).forEach((name) => options.add(name));
       } else if (provider.type === 'anthropic') {
@@ -149,20 +158,32 @@ function ProviderEditView() {
     void loadProviders();
   }, []);
 
-  // Load OAuth status for Anthropic
+  // Load OAuth status for OAuth-capable providers
   useEffect(() => {
-    if (selected?.type !== 'anthropic') return;
-    
+    if (selected?.type !== 'anthropic' && selected?.type !== 'openai_codex') return;
+
     let canceled = false;
-    void getAnthropicOAuthStatus()
-      .then((status) => {
-        if (canceled) return;
-        setOAuthEnabled(status.enabled);
-        setOAuthExpiresAt(status.expires_at || null);
-      })
-      .catch((err) => {
-        console.error('Failed to load OAuth status:', err);
-      });
+    if (selected.type === 'anthropic') {
+      void getAnthropicOAuthStatus()
+        .then((status) => {
+          if (canceled) return;
+          setOAuthEnabled(status.enabled);
+          setOAuthExpiresAt(status.expires_at || null);
+        })
+        .catch((err) => {
+          console.error('Failed to load OAuth status:', err);
+        });
+    } else {
+      void getOpenAICodexOAuthStatus()
+        .then((status) => {
+          if (canceled) return;
+          setCodexOAuthEnabled(status.enabled);
+          setCodexOAuthExpiresAt(status.expires_at || null);
+        })
+        .catch((err) => {
+          console.error('Failed to load Codex OAuth status:', err);
+        });
+    }
 
     return () => {
       canceled = true;
@@ -208,7 +229,10 @@ function ProviderEditView() {
     }
 
     setApiKey('');
-    const initialBaseURL = selected.base_url || selected.default_url || '';
+    let initialBaseURL = selected.base_url || selected.default_url || '';
+    if (selected.type === 'openai_codex' && initialBaseURL.toLowerCase().includes('api.openai.com')) {
+      initialBaseURL = selected.default_url || initialBaseURL;
+    }
     setBaseURL(initialBaseURL);
     setModel(selected.model || selected.default_model || '');
     setAvailableModels([]);
@@ -515,6 +539,41 @@ function ProviderEditView() {
     }
   };
 
+  const handleImportCodexOAuth = async () => {
+    try {
+      setIsSaving(true);
+      setError(null);
+      const result = await importOpenAICodexOAuth();
+      setCodexOAuthEnabled(true);
+      setCodexOAuthExpiresAt(result.expires_at || null);
+      setSuccess(`Codex OAuth imported from ${result.path}`);
+    } catch (err) {
+      console.error('Failed to import Codex OAuth:', err);
+      setError(err instanceof Error ? err.message : 'Failed to import Codex OAuth');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDisconnectCodexOAuth = async () => {
+    if (!confirm('Disconnect Codex OAuth? You will need to use API key instead.')) {
+      return;
+    }
+    try {
+      setIsSaving(true);
+      setError(null);
+      await disconnectOpenAICodexOAuth();
+      setCodexOAuthEnabled(false);
+      setCodexOAuthExpiresAt(null);
+      setSuccess('Codex OAuth disconnected. Use API key for authentication.');
+    } catch (err) {
+      console.error('Failed to disconnect Codex OAuth:', err);
+      setError(err instanceof Error ? err.message : 'Failed to disconnect Codex OAuth');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleTest = async () => {
     if (!providerType) return;
     try {
@@ -700,8 +759,98 @@ function ProviderEditView() {
             </div>
           ) : null}
 
+          {/* OpenAI Codex: OAuth import or API key */}
+          {isOpenAICodex && !isFallback && !isAutomaticRouter ? (
+            <div className="settings-field">
+              <span>Authentication method</span>
+              {codexOAuthEnabled ? (
+                <div className="provider-oauth-status">
+                  <div className="provider-oauth-status-row">
+                    <span className="status-badge status-completed">✓ OAuth Connected (Codex/ChatGPT)</span>
+                    <button
+                      type="button"
+                      className="settings-remove-btn"
+                      onClick={handleDisconnectCodexOAuth}
+                      disabled={isSaving}
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                  {codexOAuthExpiresAt ? (() => {
+                    const isExpired = Date.now() / 1000 > codexOAuthExpiresAt;
+                    return (
+                      <span className="thinking-note" style={{ margin: 0, color: isExpired ? '#ef4444' : undefined }}>
+                        {isExpired
+                          ? `⚠ Token expired: ${new Date(codexOAuthExpiresAt * 1000).toLocaleString()} — run codex login, then import again`
+                          : `Token expires: ${new Date(codexOAuthExpiresAt * 1000).toLocaleString()}`}
+                      </span>
+                    );
+                  })() : null}
+                </div>
+              ) : (
+                <div className="provider-oauth-choice">
+                  <div className="provider-oauth-section recommended">
+                    <div className="provider-oauth-section-header">
+                      <div className="provider-oauth-section-title">
+                        Codex / ChatGPT OAuth
+                        <span className="provider-oauth-badge recommended">Recommended</span>
+                      </div>
+                      <span className="provider-oauth-badge free">OAuth</span>
+                    </div>
+                    <div className="provider-oauth-section-description">
+                      Sign in with Codex locally, then import OAuth credentials from your Codex auth cache.
+                    </div>
+                    <div className="provider-oauth-benefits">
+                      <div className="provider-oauth-benefit">Separate from API key management</div>
+                      <div className="provider-oauth-benefit">Uses your existing Codex login session</div>
+                      <div className="provider-oauth-benefit">One-click re-import after refresh/login</div>
+                    </div>
+                    <span className="thinking-note" style={{ margin: '0 0 8px 0' }}>
+                      Run <code>codex login</code> in terminal first. Import reads <code>~/.codex/auth.json</code>.
+                    </span>
+                    <button
+                      type="button"
+                      className="settings-save-btn"
+                      onClick={handleImportCodexOAuth}
+                      disabled={isSaving}
+                      style={{ width: '100%' }}
+                    >
+                      {isSaving ? 'Importing...' : 'Import OAuth from Codex'}
+                    </button>
+                  </div>
+
+                  <div className="provider-oauth-divider" />
+
+                  <div className="provider-oauth-section">
+                    <div className="provider-oauth-section-header">
+                      <div className="provider-oauth-section-title">API Key</div>
+                      <span className="provider-oauth-badge paid">Pay per use</span>
+                    </div>
+                    <div className="provider-oauth-section-description">
+                      Use standard OpenAI API keys instead of OAuth.
+                    </div>
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder={selected.has_api_key ? 'Stored (enter to replace)' : 'Enter API key'}
+                      autoComplete="off"
+                      style={{ marginBottom: '8px' }}
+                    />
+                    <span className="thinking-note" style={{ margin: 0 }}>
+                      Get an API key from{' '}
+                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer noopener">
+                        platform.openai.com/api-keys
+                      </a>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+
           {/* Other providers: API key only */}
-          {!isLMStudio && !isFallback && !isAutomaticRouter && !isAnthropic ? (
+          {!isLMStudio && !isFallback && !isAutomaticRouter && !isAnthropic && !isOpenAICodex ? (
             <label className="settings-field">
               <span>API key</span>
               <input
@@ -718,7 +867,8 @@ function ProviderEditView() {
                   <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer noopener">
                     platform.openai.com/api-keys
                   </a>
-                  .
+                  . OpenAI API authentication is API-key based; OAuth sign-in is not currently supported for this provider.
+                  ChatGPT Plus/Pro subscriptions are billed separately from API usage.
                 </span>
               ) : isOpenRouter ? (
                 <span className="thinking-note">
@@ -739,7 +889,7 @@ function ProviderEditView() {
             </label>
           ) : null}
 
-          {(isLMStudio || isKimi || isGoogle || isOpenAI || isOpenRouter || isAnthropic) && !isFallback && !isAutomaticRouter ? (
+          {(isLMStudio || isKimi || isGoogle || isOpenAI || isOpenAICodex || isOpenRouter || isAnthropic) && !isFallback && !isAutomaticRouter ? (
             <div className="settings-field">
               <span>Default model</span>
               <div className="provider-model-query-row">
@@ -751,6 +901,8 @@ function ProviderEditView() {
                         ? 'Select a loaded Gemini model'
                         : isOpenAI
                           ? 'Select an OpenAI model'
+                          : isOpenAICodex
+                            ? 'Select an OpenAI model'
                           : isOpenRouter
                             ? 'Select an OpenRouter model'
                             : isAnthropic

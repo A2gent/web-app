@@ -1904,6 +1904,44 @@ export async function disconnectAnthropicOAuth(): Promise<void> {
   }
 }
 
+export interface OpenAICodexOAuthImportResponse {
+  success: boolean;
+  imported: boolean;
+  path: string;
+  expires_at?: number;
+}
+
+export async function importOpenAICodexOAuth(path?: string): Promise<OpenAICodexOAuthImportResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/providers/openai_codex/oauth/import`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(path && path.trim() !== '' ? { path: path.trim() } : {}),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to import OpenAI Codex OAuth');
+  }
+  return response.json();
+}
+
+export async function getOpenAICodexOAuthStatus(): Promise<AnthropicOAuthStatusResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/providers/openai_codex/oauth/status`);
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to get OpenAI Codex OAuth status');
+  }
+  return response.json();
+}
+
+export async function disconnectOpenAICodexOAuth(): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/providers/openai_codex/oauth`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to disconnect OpenAI Codex OAuth');
+  }
+}
+
 export async function setActiveProvider(providerType: LLMProviderType): Promise<ProviderConfig[]> {
   const response = await fetch(`${getApiBaseUrl()}/providers/active`, {
     method: 'PUT',
@@ -1991,6 +2029,21 @@ export async function listOpenAIModels(baseURL?: string): Promise<string[]> {
   return data.models || [];
 }
 
+export async function listOpenAICodexModels(baseURL?: string): Promise<string[]> {
+  const url = new URL(`${getApiBaseUrl()}/providers/openai_codex/models`);
+  const normalizedBaseURL = normalizeLMStudioBaseUrl(baseURL);
+  if (normalizedBaseURL) {
+    url.searchParams.set('base_url', normalizedBaseURL);
+  }
+
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to load OpenAI Codex models');
+  }
+  const data: ProviderModelsResponse = await response.json();
+  return data.models || [];
+}
+
 export async function listOpenRouterModels(baseURL?: string): Promise<string[]> {
   const params = new URLSearchParams();
   if (baseURL) {
@@ -2026,6 +2079,8 @@ export async function listProviderModels(providerType: LLMProviderType): Promise
       return listGoogleModels();
     case 'openai':
       return listOpenAIModels();
+    case 'openai_codex':
+      return listOpenAICodexModels();
     case 'openrouter':
       return listOpenRouterModels();
     case 'anthropic':

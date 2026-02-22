@@ -28,6 +28,8 @@ function formatProvider(type: LLMProviderType): string {
       return "Gemini";
     case "openai":
       return "OpenAI";
+    case "openai_codex":
+      return "OpenAI (Codex OAuth)";
     case "automatic_router":
       return "Automatic Router";
     default:
