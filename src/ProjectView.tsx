@@ -445,6 +445,7 @@ function ProjectView() {
   const [isLoadingCommitFileDiff, setIsLoadingCommitFileDiff] = useState(false);
   const [isGeneratingCommitMessage, setIsGeneratingCommitMessage] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
+  const commitDiffRequestRef = useRef(0);
 
   // Sessions state
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -1267,6 +1268,9 @@ function ProjectView() {
       setSelectedCommitFileDiff('');
       setCommitMessage('');
       setIsCommitDialogOpen(true);
+      if (firstPath) {
+        void loadCommitFileDiff(firstPath, repoPath);
+      }
       if ((status.files || []).length > 0) {
         void handleGenerateCommitMessage(repoPath, true);
       }
@@ -1286,6 +1290,7 @@ function ProjectView() {
     setSelectedCommitFileDiff('');
     setIsGeneratingCommitMessage(false);
     setIsPushing(false);
+    commitDiffRequestRef.current += 1;
   };
 
   const refreshCommitDialogFiles = useCallback(async () => {
@@ -1305,19 +1310,25 @@ function ProjectView() {
     }
   }, [projectId, commitRepoPath, selectedCommitFilePath]);
 
-  const loadCommitFileDiff = useCallback(async (path: string) => {
+  const loadCommitFileDiff = useCallback(async (path: string, repoPathOverride?: string) => {
     if (!projectId || path.trim() === '') {
       setSelectedCommitFileDiff('');
       return;
     }
+    const requestID = commitDiffRequestRef.current + 1;
+    commitDiffRequestRef.current = requestID;
+    const targetRepoPath = repoPathOverride ?? commitRepoPath;
     setIsLoadingCommitFileDiff(true);
     try {
-      const diffResponse = await getProjectGitFileDiff(projectId, path, commitRepoPath);
+      const diffResponse = await getProjectGitFileDiff(projectId, path, targetRepoPath);
+      if (requestID !== commitDiffRequestRef.current) return;
       setSelectedCommitFileDiff(diffResponse.preview || 'No diff available for this file.');
     } catch (diffError) {
+      if (requestID !== commitDiffRequestRef.current) return;
       setSelectedCommitFileDiff('Failed to load diff preview.');
       setError(diffError instanceof Error ? diffError.message : 'Failed to load diff preview');
     } finally {
+      if (requestID !== commitDiffRequestRef.current) return;
       setIsLoadingCommitFileDiff(false);
     }
   }, [projectId, commitRepoPath]);
