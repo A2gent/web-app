@@ -135,6 +135,8 @@ function A2AMyAgentView() {
   // Form state
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [grpcAddrInput, setGrpcAddrInput] = useState('');
+  const [wsUrlInput, setWsUrlInput] = useState('');
+  const [transportInput, setTransportInput] = useState<'grpc' | 'websocket'>('grpc');
   const [showKey, setShowKey] = useState(false);
   const [isEditingKey, setIsEditingKey] = useState(false);
 
@@ -272,14 +274,23 @@ function A2AMyAgentView() {
 
   const handleConnect = async () => {
     const key = apiKeyInput.trim();
-    const addr = grpcAddrInput.trim() || (integration?.config?.square_grpc_addr ?? '');
+    const transport = transportInput;
+    const grpcAddr = grpcAddrInput.trim() || (integration?.config?.square_grpc_addr ?? '');
+    const wsUrl = wsUrlInput.trim() || (integration?.config?.square_ws_url ?? '');
     if (!key) { setError('API key is required.'); return; }
-    if (!addr) { setError('Square gRPC address is required (e.g. localhost:50051).'); return; }
+    if (transport === 'grpc' && !grpcAddr) { setError('Square gRPC address is required (e.g. localhost:50051).'); return; }
+    if (transport === 'websocket' && !wsUrl) { setError('Square WebSocket URL is required (e.g. ws://localhost:9000/tunnel/ws).'); return; }
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      const config = { ...(integration?.config ?? {}), api_key: key, square_grpc_addr: addr };
+      const config = {
+        ...(integration?.config ?? {}),
+        api_key: key,
+        transport,
+        square_grpc_addr: grpcAddr,
+        square_ws_url: wsUrl,
+      };
       if (integration) {
         await updateIntegration(integration.id, {
           provider: 'a2_registry', name: integration.name || 'A2 Registry',
@@ -293,6 +304,7 @@ function A2AMyAgentView() {
       }
       setApiKeyInput('');
       setGrpcAddrInput('');
+      setWsUrlInput('');
       setIsEditingKey(false);
       setSuccess('Agent connected to the A2A network.');
       await loadIntegration();
@@ -333,10 +345,11 @@ function A2AMyAgentView() {
     try {
       await updateIntegration(integration.id, {
         provider: 'a2_registry', name: integration.name, mode: 'duplex',
-        enabled: false, config: { api_key: '', square_grpc_addr: '' },
+        enabled: false, config: { api_key: '', square_grpc_addr: '', square_ws_url: '', transport: 'grpc' },
       });
       setApiKeyInput('');
       setGrpcAddrInput('');
+      setWsUrlInput('');
       setSuccess('Disconnected from the A2A network.');
       await loadIntegration();
       void loadTunnelStatus();
@@ -363,6 +376,8 @@ function A2AMyAgentView() {
   const startEditKey = () => {
     setApiKeyInput('');
     setGrpcAddrInput(integration?.config?.square_grpc_addr ?? '');
+    setWsUrlInput(integration?.config?.square_ws_url ?? '');
+    setTransportInput((integration?.config?.transport as 'grpc' | 'websocket') || 'grpc');
     setShowKey(false);
     setIsEditingKey(true);
     setError(null);
@@ -372,6 +387,7 @@ function A2AMyAgentView() {
   const cancelEditKey = () => {
     setApiKeyInput('');
     setGrpcAddrInput('');
+    setWsUrlInput('');
     setShowKey(false);
     setIsEditingKey(false);
     setError(null);
@@ -386,9 +402,21 @@ function A2AMyAgentView() {
 
         {!isReplace && (
           <p className="settings-help" style={{ margin: 0 }}>
-            Enter your A2 Registry API key and the Square gRPC address to register this agent on the network.
+            Enter your A2 Registry API key and choose the tunnel channel used to connect to Square.
           </p>
         )}
+
+        <label className="settings-field">
+          <span>Tunnel transport</span>
+          <select
+            value={transportInput}
+            onChange={e => setTransportInput(e.target.value as 'grpc' | 'websocket')}
+            disabled={saving}
+          >
+            <option value="grpc">gRPC</option>
+            <option value="websocket">WebSocket</option>
+          </select>
+        </label>
 
         <label className="settings-field">
           <span>API key</span>
@@ -410,21 +438,39 @@ function A2AMyAgentView() {
           </div>
         </label>
 
-        <label className="settings-field">
-          <span>Square gRPC address</span>
-          <input
-            type="text"
-            value={grpcAddrInput}
-            onChange={e => setGrpcAddrInput(e.target.value)}
-            placeholder="localhost:50051"
-            autoComplete="off"
-            disabled={saving}
-            onKeyDown={e => { if (e.key === 'Enter') void handleConnect(); }}
-          />
-          <span className="settings-help" style={{ margin: 0 }}>
-            The host:port of Square's gRPC tunnel server (e.g. <code>square.example.com:50051</code>).
-          </span>
-        </label>
+        {transportInput === 'grpc' ? (
+          <label className="settings-field">
+            <span>Square gRPC address</span>
+            <input
+              type="text"
+              value={grpcAddrInput}
+              onChange={e => setGrpcAddrInput(e.target.value)}
+              placeholder="localhost:50051"
+              autoComplete="off"
+              disabled={saving}
+              onKeyDown={e => { if (e.key === 'Enter') void handleConnect(); }}
+            />
+            <span className="settings-help" style={{ margin: 0 }}>
+              The host:port of Square&apos;s gRPC tunnel server (e.g. <code>square.example.com:50051</code>).
+            </span>
+          </label>
+        ) : (
+          <label className="settings-field">
+            <span>Square WebSocket URL</span>
+            <input
+              type="text"
+              value={wsUrlInput}
+              onChange={e => setWsUrlInput(e.target.value)}
+              placeholder="ws://localhost:9000/tunnel/ws"
+              autoComplete="off"
+              disabled={saving}
+              onKeyDown={e => { if (e.key === 'Enter') void handleConnect(); }}
+            />
+            <span className="settings-help" style={{ margin: 0 }}>
+              Full WebSocket tunnel endpoint (e.g. <code>wss://square.example.com/tunnel/ws</code>).
+            </span>
+          </label>
+        )}
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" className="settings-save-btn" onClick={() => void handleConnect()} disabled={saving || !apiKeyInput.trim()}>
@@ -441,7 +487,10 @@ function A2AMyAgentView() {
   function renderConnectedPanel() {
     const enabled = integration?.enabled ?? false;
     const state = tunnelStatus?.state ?? 'disconnected';
-    const addr = integration?.config?.square_grpc_addr ?? '—';
+    const transport = (integration?.config?.transport as 'grpc' | 'websocket') || 'grpc';
+    const addr = transport === 'websocket'
+      ? (integration?.config?.square_ws_url ?? '—')
+      : (integration?.config?.square_grpc_addr ?? '—');
     return (
       <section className="settings-group" style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <h3 style={{ margin: 0 }}>Connection</h3>
@@ -454,9 +503,9 @@ function A2AMyAgentView() {
           </span>
         </div>
 
-        {/* gRPC address */}
+        {/* Tunnel endpoint */}
         <div style={{ fontSize: '0.82em', color: 'var(--text-2)' }}>
-          Square: <code>{addr}</code>
+          {transport === 'websocket' ? 'WebSocket' : 'gRPC'}: <code>{addr}</code>
           {tunnelStatus?.connected_at && (
             <span style={{ marginLeft: 12 }}>
               · connected {relativeTime(tunnelStatus.connected_at)}

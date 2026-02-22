@@ -19,6 +19,7 @@ import ToolsView from './ToolsView';
 import NotificationsView from './NotificationsView';
 import A2ARegistryView from './A2ARegistryView';
 import A2AMyAgentView from './A2AMyAgentView';
+import A2AContactView from './A2AContactView';
 import { buildImageAssetUrl, fetchAgentName, fetchSpeechClip, getSession, listSessions, saveAgentName } from './api';
 import { THINKING_PROJECT_ID } from './thinking';
 import { SYSTEM_PROJECT_KB_ID, SYSTEM_PROJECT_AGENT_ID } from './Sidebar';
@@ -717,6 +718,7 @@ function AppLayout() {
           <Route path="/projects/:projectId" element={<ProjectView />} />
           <Route path="/a2a" element={<A2ARegistryView />} />
           <Route path="/a2a/my-agent" element={<A2AMyAgentView />} />
+          <Route path="/a2a/contact/:agentId" element={<A2AContactView />} />
         </Routes>
       </div>
     </div>

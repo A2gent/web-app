@@ -128,6 +128,9 @@ export interface Session {
   a2a_inbound?: boolean;
   a2a_source_agent_id?: string;
   a2a_source_agent_name?: string;
+  a2a_outbound?: boolean;
+  a2a_target_agent_id?: string;
+  a2a_target_agent_name?: string;
 }
 
 export interface ProviderFailure {
@@ -638,6 +641,40 @@ export interface TunnelStatus {
   connected_at?: string;
   square_addr: string;
   log: TunnelLogEntry[];
+}
+
+export interface CreateA2AOutboundSessionRequest {
+  target_agent_id: string;
+  target_agent_name?: string;
+  project_id?: string;
+}
+
+export async function createA2AOutboundSession(request: CreateA2AOutboundSessionRequest): Promise<Session> {
+  const response = await fetch(`${getApiBaseUrl()}/a2a/outbound/sessions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to create outbound A2A session');
+  }
+  return response.json();
+}
+
+export async function sendA2AOutboundMessage(sessionId: string, message: string): Promise<ChatResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/a2a/outbound/sessions/${encodeURIComponent(sessionId)}/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ message }),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to send A2A message');
+  }
+  return response.json();
 }
 
 export async function getA2ATunnelStatus(): Promise<TunnelStatus> {
