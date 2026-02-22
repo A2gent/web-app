@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { buildImageAssetUrl, type Message, type SystemPromptSnapshot, type ToolCall, type ToolResult } from './api';
 import { IntegrationProviderIcon, integrationProviderForToolName, integrationProviderLabel } from './integrationMeta';
@@ -9,6 +9,41 @@ import { toolIconForName } from './toolIcons';
 import { ToolIcon } from './ToolIcon';
 import { emitWebAppNotification } from './webappNotifications';
 import SystemPromptMessage from './SystemPromptMessage';
+
+const copyToClipboard = async (text: string, onSuccess: () => void): Promise<void> => {
+  try {
+    await navigator.clipboard.writeText(text);
+    onSuccess();
+  } catch (err) {
+    console.error('Failed to copy to clipboard:', err);
+  }
+};
+
+const CopyButton: React.FC<{ text: string }> = ({ text }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!text) return;
+    copyToClipboard(text, () => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  if (!text) return null;
+
+  return (
+    <button
+      type="button"
+      className="message-copy"
+      onClick={handleCopy}
+      title="Copy to clipboard"
+      aria-label="Copy to clipboard"
+    >
+      {copied ? '✓' : '📋'}
+    </button>
+  );
+};
 
 interface MessageListProps {
   messages: Message[];
@@ -400,6 +435,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
                   {totalTokens} tok
                 </span>
               ) : null}
+              <CopyButton text={toolCall.input ? JSON.stringify(toolCall.input, null, 2) : ''} />
               <span className="message-time" title={new Date(timestamp).toLocaleString()}>🕐</span>
             </span>
           </summary>
@@ -444,6 +480,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, sessionI
             <span className="tool-summary-name">
               <span className="tool-name">Tool result</span>
             </span>
+            <CopyButton text={result.content} />
             <span className="message-time" title={new Date(timestamp).toLocaleString()}>🕐</span>
           </summary>
           <div className="tool-card-body">

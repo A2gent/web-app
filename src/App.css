@@ -861,6 +861,30 @@ body.mind-resizing * {
   text-overflow: ellipsis;
 }
 
+.session-provider-trace {
+  font-size: 12px;
+  color: #8ecbff;
+  max-width: min(60vw, 820px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-provider-failures {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-provider-failure-row {
+  font-size: 12px;
+  color: #ffb38c;
+  max-width: min(60vw, 820px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .session-system-prompt-row {
   display: flex;
   flex-direction: column;
@@ -3473,8 +3497,8 @@ body.mind-resizing * {
   accent-color: #646cff;
 }
 
-.settings-field input,
-.settings-custom-row input,
+.settings-field input:not([type="checkbox"]):not([type="radio"]),
+.settings-custom-row input:not([type="checkbox"]):not([type="radio"]),
 .settings-field select,
 .settings-field-select,
 .settings-field textarea {
@@ -3501,8 +3525,8 @@ body.mind-resizing * {
   flex: 1;
 }
 
-.settings-field input:focus,
-.settings-custom-row input:focus,
+.settings-field input:not([type="checkbox"]):not([type="radio"]):focus,
+.settings-custom-row input:not([type="checkbox"]):not([type="radio"]):focus,
 .settings-field select:focus,
 .settings-field-select:focus,
 .settings-field textarea:focus {

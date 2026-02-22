@@ -13,14 +13,16 @@ import {
   sendMessageStream,
   getPendingQuestion,
   answerQuestion,
-  updateSessionProvider,
   listProviderModels,
+  createSession,
+  getSettings,
   type LLMProviderType,
   type ProviderConfig,
   type Session,
   type Message,
   type ChatStreamEvent,
   type PendingQuestion,
+  type ProviderFailure,
 } from './api';
 
 type ChatLocationState = {
@@ -146,6 +148,153 @@ function deriveSessionFailureReason(session: Session | null, runtimeError: strin
   return 'Session failed without a detailed reason.';
 }
 
+function formatProviderTrace(event: Extract<ChatStreamEvent, { type: 'provider_trace' }>): string {
+  const trace = event.provider || {};
+  const provider = (trace.provider || '').trim();
+  const model = (trace.model || '').trim();
+  const fallbackTo = (trace.fallback_to || '').trim();
+  const fallbackModel = (trace.fallback_model || '').trim();
+  const attempt = trace.attempt ?? 0;
+  const maxAttempts = trace.max_attempts ?? 0;
+  const nodeIndex = trace.node_index ?? 0;
+  const totalNodes = trace.total_nodes ?? 0;
+  const reason = (trace.reason || '').trim();
+  const providerLabel = provider ? (model ? `${provider}/${model}` : provider) : 'provider';
+
+  switch (trace.phase) {
+    case 'provider_selected':
+      if (nodeIndex > 0 && totalNodes > 0) {
+        return `Using ${providerLabel} (node ${nodeIndex}/${totalNodes})`;
+      }
+      return `Using ${providerLabel}`;
+    case 'retrying':
+      if (attempt > 0 && maxAttempts > 0) {
+        if (reason) {
+          return `Retrying ${providerLabel} (${attempt}/${maxAttempts}) after: ${reason}`;
+        }
+        return `Retrying ${providerLabel} (${attempt}/${maxAttempts})`;
+      }
+      return reason ? `Retrying ${providerLabel} after: ${reason}` : `Retrying ${providerLabel}`;
+    case 'attempt_failed':
+    case 'attempt_failed_partial':
+    case 'retry_layer_failed':
+      return reason ? `${providerLabel} failed: ${reason}` : `${providerLabel} failed`;
+    case 'switching_provider': {
+      const nextLabel = fallbackTo ? (fallbackModel ? `${fallbackTo}/${fallbackModel}` : fallbackTo) : 'next provider';
+      return reason ? `Switching from ${providerLabel} to ${nextLabel}: ${reason}` : `Switching from ${providerLabel} to ${nextLabel}`;
+    }
+    case 'completed':
+    case 'retry_layer_completed':
+      return trace.recovered ? `Recovered on ${providerLabel}` : `Completed on ${providerLabel}`;
+    default:
+      return reason ? `${providerLabel}: ${reason}` : providerLabel;
+  }
+}
+
+function formatProviderFailure(item: ProviderFailure): string {
+  const provider = (item.provider || '').trim();
+  const model = (item.model || '').trim();
+  const attempt = item.attempt ?? 0;
+  const maxAttempts = item.max_attempts ?? 0;
+  const reason = (item.reason || '').trim();
+  const phase = (item.phase || '').trim();
+  const fallbackTo = (item.fallback_to || '').trim();
+  const fallbackModel = (item.fallback_model || '').trim();
+  const providerLabel = provider ? (model ? `${provider}/${model}` : provider) : 'provider';
+  const prefix = attempt > 0 && maxAttempts > 0 ? `${providerLabel} (attempt ${attempt}/${maxAttempts})` : providerLabel;
+  const category = classifyProviderFailureReason(reason);
+  const categoryPrefix = category !== 'unknown' ? `[${category}] ` : '';
+
+  if (phase === 'switching_provider') {
+    const nextLabel = fallbackTo ? (fallbackModel ? `${fallbackTo}/${fallbackModel}` : fallbackTo) : 'next provider';
+    return reason ? `${categoryPrefix}Switching to ${nextLabel}: ${reason}` : `${categoryPrefix}Switching to ${nextLabel}`;
+  }
+  return reason ? `${categoryPrefix}${prefix}: ${reason}` : `${categoryPrefix}${prefix} failed`;
+}
+
+function classifyProviderFailureReason(reason: string): 'billing' | 'auth' | 'rate_limit' | 'timeout' | 'network' | 'provider_error' | 'canceled' | 'unknown' {
+  const text = reason.trim().toLowerCase();
+  if (text === '') {
+    return 'unknown';
+  }
+  if (
+    text.includes('insufficient_quota') ||
+    text.includes('billing') ||
+    text.includes('credit') ||
+    text.includes('payment required') ||
+    text.includes('402')
+  ) {
+    return 'billing';
+  }
+  if (
+    text.includes('unauthorized') ||
+    text.includes('authentication') ||
+    text.includes('invalid api key') ||
+    text.includes('forbidden') ||
+    text.includes('401') ||
+    text.includes('403')
+  ) {
+    return 'auth';
+  }
+  if (text.includes('rate limit') || text.includes('ratelimit') || text.includes('429') || text.includes('quota')) {
+    return 'rate_limit';
+  }
+  if (text.includes('context canceled') || text.includes('request was canceled') || text.includes('abort')) {
+    return 'canceled';
+  }
+  if (text.includes('deadline exceeded') || text.includes('timeout') || text.includes('timed out') || text.includes('504')) {
+    return 'timeout';
+  }
+  if (
+    text.includes('failed to connect') ||
+    text.includes('connection refused') ||
+    text.includes('dial tcp') ||
+    text.includes('no such host') ||
+    text.includes('connection reset') ||
+    text.includes('broken pipe') ||
+    text.includes('tls')
+  ) {
+    return 'network';
+  }
+  if (
+    text.includes('500') ||
+    text.includes('502') ||
+    text.includes('503') ||
+    text.includes('invalid_argument') ||
+    text.includes('bad request') ||
+    text.includes('request contains an invalid argument')
+  ) {
+    return 'provider_error';
+  }
+  return 'unknown';
+}
+
+function isProviderFailurePhase(phase: string | undefined): boolean {
+  switch ((phase || '').trim()) {
+    case 'attempt_failed':
+    case 'attempt_failed_partial':
+    case 'retry_layer_failed':
+    case 'switching_provider':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function providerFailureToMessage(item: ProviderFailure): Message {
+  return {
+    role: 'system',
+    content: `Provider failure: ${formatProviderFailure(item)}`,
+    timestamp: item.timestamp || new Date().toISOString(),
+    metadata: {
+      provider_failure: true,
+      phase: item.phase || '',
+      provider: item.provider || '',
+      model: item.model || '',
+    },
+  };
+}
+
 function ChatView() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -168,6 +317,7 @@ function ChatView() {
   const [switcherModel, setSwitcherModel] = useState<string>('');
   const [switcherModels, setSwitcherModels] = useState<string[]>([]);
   const [isSwitchingModel, setIsSwitchingModel] = useState(false);
+  const [providerTrace, setProviderTrace] = useState<string>('');
 
   const SESSION_POLL_INTERVAL_MS = 2000; // Poll every 2 seconds for active sessions
   
@@ -179,6 +329,16 @@ function ChatView() {
   );
   const systemPromptSnapshot = session?.system_prompt_snapshot;
   const routedTarget = useMemo(() => routedTargetLabel(session), [session]);
+  const providerFailures = useMemo(() => (session?.provider_failures || []).slice(-8), [session?.provider_failures]);
+  const messagesWithProviderFailures = useMemo(() => {
+    const base = Array.isArray(messages) ? [...messages] : [];
+    const failures = session?.provider_failures || [];
+    if (failures.length === 0) {
+      return base;
+    }
+    const synthetic = failures.map(providerFailureToMessage);
+    return [...base, ...synthetic].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  }, [messages, session?.provider_failures]);
 
   useEffect(() => {
     if (activeSessionId) {
@@ -371,6 +531,7 @@ function ChatView() {
     }
     setIsLoading(true);
     setError(null);
+    setProviderTrace('');
     const controller = new AbortController();
     activeStreamAbortRef.current = controller;
 
@@ -445,8 +606,37 @@ function ChatView() {
       return;
     }
 
+    if (event.type === 'provider_trace') {
+      setProviderTrace(formatProviderTrace(event));
+      if (isProviderFailurePhase(event.provider?.phase)) {
+        const now = new Date().toISOString();
+        setSession((prev) => {
+          if (!prev || prev.id !== targetSessionId) {
+            return prev;
+          }
+          const nextFailure: ProviderFailure = {
+            timestamp: now,
+            provider: event.provider?.provider,
+            model: event.provider?.model,
+            attempt: event.provider?.attempt,
+            max_attempts: event.provider?.max_attempts,
+            node_index: event.provider?.node_index,
+            total_nodes: event.provider?.total_nodes,
+            phase: event.provider?.phase,
+            reason: event.provider?.reason,
+            fallback_to: event.provider?.fallback_to,
+            fallback_model: event.provider?.fallback_model,
+          };
+          const existing = prev.provider_failures || [];
+          return { ...prev, provider_failures: [...existing, nextFailure] };
+        });
+      }
+      return;
+    }
+
     if (event.type === 'done') {
       setMessages(event.messages);
+      setProviderTrace('');
       setSession(prev => {
         if (!prev || prev.id !== targetSessionId) {
           return prev;
@@ -470,6 +660,7 @@ function ChatView() {
     }
 
     if (event.type === 'error') {
+      setProviderTrace('');
       setError(normalizeFailureReason(event.error || 'Failed to send message'));
       if (typeof event.status === 'string' && event.status.trim() !== '') {
         setSession(prev => (prev && prev.id === targetSessionId ? { ...prev, status: event.status as string } : prev));
@@ -509,6 +700,7 @@ function ChatView() {
       const fresh = await getSession(session.id);
       setSession(fresh);
       setMessages(fresh.messages || []);
+      setProviderTrace('');
       setError('Request was canceled before completion.');
     } catch (err) {
       console.error('Failed to cancel session:', err);
@@ -557,12 +749,19 @@ function ChatView() {
 
     setIsSwitchingModel(true);
     try {
-      const updated = await updateSessionProvider(
-        session.id,
-        switcherProvider,
-        switcherModel || undefined
-      );
-      setSession(updated);
+      const settings = await getSettings();
+      const sessionsDir = settings['AAGENT_SESSIONS_FOLDER'] || '~/.local/share/aagent/sessions';
+      const jsonlPath = `${sessionsDir}/${session.id}.jsonl`;
+
+      const newSession = await createSession({
+        agent_id: session.agent_id,
+        provider: switcherProvider,
+        model: switcherModel || undefined,
+        project_id: session.project_id,
+        task: `Continue previous session which was stored in this file: ${jsonlPath}`
+      });
+
+      navigate(`/chat/${newSession.id}`);
       setShowModelSwitcher(false);
       setError(null);
     } catch (err) {
@@ -643,6 +842,24 @@ function ChatView() {
                   Failure reason: {sessionFailureReason}
                 </div>
               ) : null}
+              {providerTrace && isActiveRequest ? (
+                <div className="session-provider-trace" title={providerTrace}>
+                  {providerTrace}
+                </div>
+              ) : null}
+              {providerFailures.length > 0 ? (
+                <div className="session-provider-failures">
+                  {providerFailures.map((item, idx) => {
+                    const text = formatProviderFailure(item);
+                    const key = `${item.timestamp || 'ts'}-${idx}`;
+                    return (
+                      <div key={key} className="session-provider-failure-row" title={text}>
+                        {text}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
               </div>
             </>
           ) : (
@@ -661,7 +878,7 @@ function ChatView() {
       <div className="chat-history">
         {messages.length > 0 || systemPromptSnapshot ? (
           <MessageList 
-            messages={messages} 
+            messages={messagesWithProviderFailures} 
             isLoading={isLoading} 
             sessionId={session?.id || null}
             projectId={session?.project_id || null}

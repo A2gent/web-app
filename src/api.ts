@@ -119,10 +119,29 @@ export interface Session {
   model_context_window?: number;
   run_duration_seconds?: number;
   task_progress?: string;
+  provider_failures?: ProviderFailure[];
   created_at: string;
   updated_at: string;
   messages?: Message[];
   system_prompt_snapshot?: SystemPromptSnapshot;
+  // A2A inbound — only present on sessions created from tunnel requests
+  a2a_inbound?: boolean;
+  a2a_source_agent_id?: string;
+  a2a_source_agent_name?: string;
+}
+
+export interface ProviderFailure {
+  timestamp: string;
+  provider?: string;
+  model?: string;
+  attempt?: number;
+  max_attempts?: number;
+  node_index?: number;
+  total_nodes?: number;
+  phase?: string;
+  reason?: string;
+  fallback_to?: string;
+  fallback_model?: string;
 }
 
 export interface SystemPromptSnapshot {
@@ -162,6 +181,7 @@ export interface ToolCall {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  thought_signature?: string;
   input_tokens?: number;
   output_tokens?: number;
 }
@@ -200,6 +220,7 @@ export interface StreamToolCall {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  thought_signature?: string;
 }
 
 export interface StreamToolResult {
@@ -215,6 +236,23 @@ export type ChatStreamEvent =
   | { type: 'tool_executing'; step: number; tool_calls: StreamToolCall[] }
   | { type: 'tool_completed'; step: number; messages: Message[]; status: string }
   | { type: 'step_completed'; step: number }
+  | {
+      type: 'provider_trace';
+      step: number;
+      provider: {
+        provider?: string;
+        model?: string;
+        attempt?: number;
+        max_attempts?: number;
+        node_index?: number;
+        total_nodes?: number;
+        phase?: string;
+        reason?: string;
+        fallback_to?: string;
+        fallback_model?: string;
+        recovered?: boolean;
+      };
+    }
   | { type: 'done'; content: string; messages: Message[]; status: string; usage?: { input_tokens: number; output_tokens: number } }
   | { type: 'error'; error: string; status?: string };
 
@@ -576,6 +614,43 @@ export async function listSessions(): Promise<Session[]> {
     throw new Error(`Failed to list sessions: ${response.statusText}`);
   }
   return response.json();
+}
+
+export async function listA2AInboundSessions(): Promise<Session[]> {
+  const response = await fetch(`${getApiBaseUrl()}/sessions?a2a_inbound=true`);
+  if (!response.ok) {
+    throw new Error(`Failed to list A2A inbound sessions: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ---- A2A tunnel status ----
+
+export type TunnelState = 'disconnected' | 'connecting' | 'connected';
+
+export interface TunnelLogEntry {
+  time: string;
+  message: string;
+}
+
+export interface TunnelStatus {
+  state: TunnelState;
+  connected_at?: string;
+  square_addr: string;
+  log: TunnelLogEntry[];
+}
+
+export async function getA2ATunnelStatus(): Promise<TunnelStatus> {
+  const response = await fetch(`${getApiBaseUrl()}/integrations/a2_registry/tunnel-status`);
+  if (!response.ok) {
+    throw new Error(`Failed to get tunnel status: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/** Returns the SSE URL for live tunnel log streaming. */
+export function getA2ATunnelStatusStreamUrl(): string {
+  return `${getApiBaseUrl()}/integrations/a2_registry/tunnel-status/stream`;
 }
 
 export async function getSession(sessionId: string): Promise<Session> {
