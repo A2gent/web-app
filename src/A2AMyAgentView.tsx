@@ -1,89 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createIntegration, listIntegrations, updateIntegration, type Integration } from './api';
-
-// ---------------------------------------------------------------------------
-// Mock inbound sessions from external agents
-// ---------------------------------------------------------------------------
-
-interface InboundSession {
-  id: string;
-  remote_agent_name: string;
-  remote_agent_id: string;
-  started_at: string;
-  last_message_at: string;
-  status: 'active' | 'completed' | 'failed';
-  message_count: number;
-  preview: string;
-}
-
-const MOCK_INBOUND_SESSIONS: InboundSession[] = [
-  {
-    id: 'ext-0001',
-    remote_agent_name: 'ResearchBot',
-    remote_agent_id: 'a1b2c3d4-0000-0000-0000-000000000001',
-    started_at: '2026-02-21T08:14:02Z',
-    last_message_at: '2026-02-21T08:19:45Z',
-    status: 'completed',
-    message_count: 7,
-    preview: 'Summarise the last 3 commits in the brute repository and list any breaking changes.',
-  },
-  {
-    id: 'ext-0002',
-    remote_agent_name: 'SchedulerAssistant',
-    remote_agent_id: 'a1b2c3d4-0000-0000-0000-000000000005',
-    started_at: '2026-02-21T10:02:31Z',
-    last_message_at: '2026-02-21T10:02:55Z',
-    status: 'active',
-    message_count: 2,
-    preview: 'Can you check my calendar for next week and flag any conflicts with the 10am daily standup?',
-  },
-  {
-    id: 'ext-0003',
-    remote_agent_name: 'CodeReviewer',
-    remote_agent_id: 'a1b2c3d4-0000-0000-0000-000000000002',
-    started_at: '2026-02-20T16:55:10Z',
-    last_message_at: '2026-02-20T17:03:22Z',
-    status: 'completed',
-    message_count: 12,
-    preview: 'Please review the diff attached and flag any security issues or off-by-one errors.',
-  },
-  {
-    id: 'ext-0004',
-    remote_agent_name: 'DataAnalyst',
-    remote_agent_id: 'a1b2c3d4-0000-0000-0000-000000000003',
-    started_at: '2026-02-19T09:30:00Z',
-    last_message_at: '2026-02-19T09:31:05Z',
-    status: 'failed',
-    message_count: 1,
-    preview: 'Run a statistical summary on the attached CSV and return the top 5 anomalies.',
-  },
-];
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  createIntegration,
+  getA2ATunnelStatus,
+  getA2ATunnelStatusStreamUrl,
+  getSettings,
+  listA2AInboundSessions,
+  listIntegrations,
+  listProjects,
+  updateIntegration,
+  updateSettings,
+  type Integration,
+  type Project,
+  type Session,
+  type TunnelLogEntry,
+  type TunnelState,
+  type TunnelStatus,
+} from './api';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function statusDot(status: InboundSession['status']) {
-  const colors: Record<InboundSession['status'], string> = {
-    active: '#4caf82',
-    completed: '#6f8cff',
-    failed: '#f25f5c',
-  };
-  return (
-    <span
-      title={status}
-      style={{
-        display: 'inline-block',
-        width: 8,
-        height: 8,
-        borderRadius: '50%',
-        background: colors[status],
-        marginRight: 6,
-        flexShrink: 0,
-      }}
-    />
-  );
-}
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -93,6 +29,96 @@ function relativeTime(iso: string): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+function statusDot(status: string) {
+  const colors: Record<string, string> = {
+    running: '#4caf82',
+    completed: '#6f8cff',
+    failed: '#f25f5c',
+    queued: '#aeb7c7',
+    paused: '#f0b429',
+    input_required: '#f0b429',
+  };
+  return (
+    <span
+      title={status}
+      style={{
+        display: 'inline-block',
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        background: colors[status] ?? '#aeb7c7',
+        marginRight: 6,
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+function tunnelStateDot(state: TunnelState) {
+  const color =
+    state === 'connected' ? '#4caf82' :
+    state === 'connecting' ? '#f0b429' :
+    '#aeb7c7';
+  const shadow = state === 'connected' ? '0 0 6px #4caf8288' : 'none';
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 10,
+        height: 10,
+        borderRadius: '50%',
+        background: color,
+        boxShadow: shadow,
+        flexShrink: 0,
+        transition: 'background 0.2s',
+      }}
+    />
+  );
+}
+
+function tunnelStateLabel(state: TunnelState): string {
+  if (state === 'connected') return 'Connected — agent is live on the A2A network.';
+  if (state === 'connecting') return 'Connecting to Square…';
+  return 'Disconnected — agent is not reachable via A2A.';
+}
+
+// ---------------------------------------------------------------------------
+// Connection log panel
+// ---------------------------------------------------------------------------
+
+function ConnectionLog({ entries, logRef }: { entries: TunnelLogEntry[]; logRef: React.RefObject<HTMLDivElement | null> }) {
+  return (
+    <div
+      ref={logRef}
+      style={{
+        background: 'var(--surface-2)',
+        border: '1px solid var(--border)',
+        borderRadius: 6,
+        padding: '8px 10px',
+        fontFamily: 'monospace',
+        fontSize: '0.78em',
+        color: 'var(--text-2)',
+        maxHeight: 200,
+        overflowY: 'auto',
+        lineHeight: 1.6,
+      }}
+    >
+      {entries.length === 0 ? (
+        <span style={{ fontStyle: 'italic' }}>No log entries yet.</span>
+      ) : (
+        entries.map((e, i) => (
+          <div key={i}>
+            <span style={{ color: 'var(--text-3)', marginRight: 8 }}>
+              {new Date(e.time).toLocaleTimeString()}
+            </span>
+            {e.message}
+          </div>
+        ))
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -106,15 +132,31 @@ function A2AMyAgentView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Form state (used both for initial connect and edit-key mode)
+  // Form state
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [grpcAddrInput, setGrpcAddrInput] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [isEditingKey, setIsEditingKey] = useState(false);
 
+  // Tunnel status
+  const [tunnelStatus, setTunnelStatus] = useState<TunnelStatus | null>(null);
+  const [logEntries, setLogEntries] = useState<TunnelLogEntry[]>([]);
+  const logRef = useRef<HTMLDivElement | null>(null);
+  const sseRef = useRef<EventSource | null>(null);
+
+  // Projects + inbound project setting
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [inboundProjectID, setInboundProjectID] = useState<string>('');
+  const [savingProject, setSavingProject] = useState(false);
+
+  // Inbound sessions
+  const [inboundSessions, setInboundSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+
   // Derived
   const isConfigured = Boolean(integration?.config?.api_key);
-  const isConnected = isConfigured && Boolean(integration?.enabled);
 
+  // ---- Load integration ----
   const loadIntegration = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -129,42 +171,132 @@ function A2AMyAgentView() {
     }
   }, []);
 
+  // ---- Load projects + inbound project setting ----
+  const loadProjectsAndSettings = useCallback(async () => {
+    try {
+      const [projs, settings] = await Promise.all([listProjects(), getSettings()]);
+      setProjects(projs);
+      setInboundProjectID(settings['A2A_INBOUND_PROJECT_ID'] ?? '');
+    } catch {
+      // non-fatal
+    }
+  }, []);
+
+  // ---- Load inbound sessions ----
+  const loadInboundSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const sessions = await listA2AInboundSessions();
+      // Sort newest first
+      sessions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setInboundSessions(sessions);
+    } catch {
+      // non-fatal
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  // ---- Tunnel status (initial fetch) ----
+  const loadTunnelStatus = useCallback(async () => {
+    try {
+      const status = await getA2ATunnelStatus();
+      setTunnelStatus(status);
+      setLogEntries(status.log ?? []);
+    } catch {
+      // non-fatal — tunnel may not be configured yet
+    }
+  }, []);
+
+  // ---- SSE log stream ----
+  const startSSE = useCallback(() => {
+    if (sseRef.current) {
+      sseRef.current.close();
+    }
+    const es = new EventSource(getA2ATunnelStatusStreamUrl());
+    sseRef.current = es;
+
+    es.onmessage = (ev) => {
+      try {
+        const entry = JSON.parse(ev.data) as TunnelLogEntry;
+        setLogEntries(prev => {
+          const next = [...prev, entry];
+          return next.slice(-200); // keep last 200
+        });
+      } catch {
+        // ignore malformed events
+      }
+    };
+    es.onerror = () => {
+      // SSE will reconnect automatically
+    };
+  }, []);
+
+  const stopSSE = useCallback(() => {
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
+    }
+  }, []);
+
+  // ---- Auto-scroll log ----
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [logEntries]);
+
+  // ---- Initial load ----
   useEffect(() => {
     void loadIntegration();
-  }, [loadIntegration]);
+    void loadProjectsAndSettings();
+    void loadTunnelStatus();
+    void loadInboundSessions();
+    startSSE();
+    return () => stopSSE();
+  }, [loadIntegration, loadProjectsAndSettings, loadTunnelStatus, loadInboundSessions, startSSE, stopSSE]);
 
-  // Connect — creates (or updates) integration and enables it
+  // Poll tunnel status every 5s to update the state dot
+  useEffect(() => {
+    const id = setInterval(() => void loadTunnelStatus(), 5000);
+    return () => clearInterval(id);
+  }, [loadTunnelStatus]);
+
+  // Refresh inbound sessions every 15s
+  useEffect(() => {
+    const id = setInterval(() => void loadInboundSessions(), 15_000);
+    return () => clearInterval(id);
+  }, [loadInboundSessions]);
+
+  // ---- Handlers ----
+
   const handleConnect = async () => {
     const key = apiKeyInput.trim();
-    if (!key) {
-      setError('API key is required.');
-      return;
-    }
+    const addr = grpcAddrInput.trim() || (integration?.config?.square_grpc_addr ?? '');
+    if (!key) { setError('API key is required.'); return; }
+    if (!addr) { setError('Square gRPC address is required (e.g. localhost:50051).'); return; }
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
+      const config = { ...(integration?.config ?? {}), api_key: key, square_grpc_addr: addr };
       if (integration) {
         await updateIntegration(integration.id, {
-          provider: 'a2_registry',
-          name: integration.name || 'A2 Registry',
-          mode: 'duplex',
-          enabled: true,
-          config: { ...integration.config, api_key: key },
+          provider: 'a2_registry', name: integration.name || 'A2 Registry',
+          mode: 'duplex', enabled: true, config,
         });
       } else {
         await createIntegration({
-          provider: 'a2_registry',
-          name: 'A2 Registry',
-          mode: 'duplex',
-          enabled: true,
-          config: { api_key: key },
+          provider: 'a2_registry', name: 'A2 Registry',
+          mode: 'duplex', enabled: true, config,
         });
       }
       setApiKeyInput('');
+      setGrpcAddrInput('');
       setIsEditingKey(false);
       setSuccess('Agent connected to the A2A network.');
       await loadIntegration();
+      void loadTunnelStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect');
     } finally {
@@ -172,7 +304,6 @@ function A2AMyAgentView() {
     }
   };
 
-  // Toggle enabled without touching the key
   const handleToggleEnabled = async (next: boolean) => {
     if (!integration) return;
     setSaving(true);
@@ -180,14 +311,12 @@ function A2AMyAgentView() {
     setSuccess(null);
     try {
       await updateIntegration(integration.id, {
-        provider: 'a2_registry',
-        name: integration.name,
-        mode: 'duplex',
-        enabled: next,
-        config: integration.config,
+        provider: 'a2_registry', name: integration.name, mode: 'duplex',
+        enabled: next, config: integration.config,
       });
       setSuccess(next ? 'Agent is now active on the network.' : 'Agent is now offline.');
       await loadIntegration();
+      void loadTunnelStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update');
     } finally {
@@ -195,7 +324,6 @@ function A2AMyAgentView() {
     }
   };
 
-  // Disconnect — disable and wipe API key
   const handleDisconnect = async () => {
     if (!integration) return;
     if (!confirm('Disconnect this agent from the A2A network? The API key will be removed.')) return;
@@ -204,15 +332,14 @@ function A2AMyAgentView() {
     setSuccess(null);
     try {
       await updateIntegration(integration.id, {
-        provider: 'a2_registry',
-        name: integration.name,
-        mode: 'duplex',
-        enabled: false,
-        config: { api_key: '' },
+        provider: 'a2_registry', name: integration.name, mode: 'duplex',
+        enabled: false, config: { api_key: '', square_grpc_addr: '' },
       });
       setApiKeyInput('');
+      setGrpcAddrInput('');
       setSuccess('Disconnected from the A2A network.');
       await loadIntegration();
+      void loadTunnelStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to disconnect');
     } finally {
@@ -220,8 +347,22 @@ function A2AMyAgentView() {
     }
   };
 
+  const handleSaveInboundProject = async (projectID: string) => {
+    setSavingProject(true);
+    try {
+      const current = await getSettings();
+      await updateSettings({ ...current, A2A_INBOUND_PROJECT_ID: projectID });
+      setInboundProjectID(projectID);
+    } catch {
+      // non-fatal
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
   const startEditKey = () => {
     setApiKeyInput('');
+    setGrpcAddrInput(integration?.config?.square_grpc_addr ?? '');
     setShowKey(false);
     setIsEditingKey(true);
     setError(null);
@@ -230,23 +371,22 @@ function A2AMyAgentView() {
 
   const cancelEditKey = () => {
     setApiKeyInput('');
+    setGrpcAddrInput('');
     setShowKey(false);
     setIsEditingKey(false);
     setError(null);
   };
 
-  // ---------------------------------------------------------------------------
-  // Render helpers
-  // ---------------------------------------------------------------------------
+  // ---- Render helpers ----
 
   function renderConnectForm(isReplace: boolean) {
     return (
       <section className="settings-group" style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <h3 style={{ margin: 0 }}>{isReplace ? 'Replace API key' : 'Connect to A2A network'}</h3>
+        <h3 style={{ margin: 0 }}>{isReplace ? 'Replace credentials' : 'Connect to A2A network'}</h3>
 
         {!isReplace && (
           <p className="settings-help" style={{ margin: 0 }}>
-            Enter your A2 Registry API key to register this agent on the network. You can obtain a key from the Square registry once it is publicly available.
+            Enter your A2 Registry API key and the Square gRPC address to register this agent on the network.
           </p>
         )}
 
@@ -264,31 +404,34 @@ function A2AMyAgentView() {
               onKeyDown={e => { if (e.key === 'Enter') void handleConnect(); }}
               autoFocus
             />
-            <button
-              type="button"
-              className="settings-add-btn"
-              onClick={() => setShowKey(v => !v)}
-              style={{ flexShrink: 0 }}
-              tabIndex={-1}
-            >
+            <button type="button" className="settings-add-btn" onClick={() => setShowKey(v => !v)} style={{ flexShrink: 0 }} tabIndex={-1}>
               {showKey ? 'Hide' : 'Show'}
             </button>
           </div>
         </label>
 
+        <label className="settings-field">
+          <span>Square gRPC address</span>
+          <input
+            type="text"
+            value={grpcAddrInput}
+            onChange={e => setGrpcAddrInput(e.target.value)}
+            placeholder="localhost:50051"
+            autoComplete="off"
+            disabled={saving}
+            onKeyDown={e => { if (e.key === 'Enter') void handleConnect(); }}
+          />
+          <span className="settings-help" style={{ margin: 0 }}>
+            The host:port of Square's gRPC tunnel server (e.g. <code>square.example.com:50051</code>).
+          </span>
+        </label>
+
         <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            className="settings-save-btn"
-            onClick={() => void handleConnect()}
-            disabled={saving || !apiKeyInput.trim()}
-          >
-            {saving ? 'Connecting…' : isReplace ? 'Save new key' : 'Connect'}
+          <button type="button" className="settings-save-btn" onClick={() => void handleConnect()} disabled={saving || !apiKeyInput.trim()}>
+            {saving ? 'Connecting…' : isReplace ? 'Save' : 'Connect'}
           </button>
           {isReplace && (
-            <button type="button" className="settings-remove-btn" onClick={cancelEditKey} disabled={saving}>
-              Cancel
-            </button>
+            <button type="button" className="settings-remove-btn" onClick={cancelEditKey} disabled={saving}>Cancel</button>
           )}
         </div>
       </section>
@@ -297,86 +440,175 @@ function A2AMyAgentView() {
 
   function renderConnectedPanel() {
     const enabled = integration?.enabled ?? false;
+    const state = tunnelStatus?.state ?? 'disconnected';
+    const addr = integration?.config?.square_grpc_addr ?? '—';
     return (
-      <section className="settings-group" style={{ marginBottom: 24 }}>
-        <div className="integration-form-title-row">
-          <h3 style={{ margin: 0 }}>Connection</h3>
-        </div>
+      <section className="settings-group" style={{ marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <h3 style={{ margin: 0 }}>Connection</h3>
 
         {/* Status row */}
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: isConnected ? '#4caf82' : '#aeb7c7',
-              flexShrink: 0,
-              boxShadow: isConnected ? '0 0 6px #4caf8288' : 'none',
-              transition: 'background 0.2s',
-            }}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+          {tunnelStateDot(state)}
           <span style={{ color: 'var(--text-1)', fontSize: '0.9em' }}>
-            {isConnected
-              ? 'Connected — agent is discoverable on the A2A network.'
-              : 'API key saved — agent is offline (not discoverable).'}
+            {tunnelStateLabel(state)}
           </span>
         </div>
 
-        {/* API key row */}
-        <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <code style={{
-            flex: 1,
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-            borderRadius: 4,
-            padding: '5px 10px',
-            fontSize: '0.85em',
-            color: 'var(--text-2)',
-            letterSpacing: '0.1em',
-          }}>
-            {'•'.repeat(24)}
-          </code>
-          <button type="button" className="settings-add-btn" onClick={startEditKey} disabled={saving}>
-            Replace key
-          </button>
-        </div>
-
-        {/* Enable / disable toggle */}
-        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={e => void handleToggleEnabled(e.target.checked)}
-              disabled={saving}
-              style={{ width: 16, height: 16, cursor: 'pointer' }}
-            />
-            <span style={{ fontSize: '0.9em' }}>
-              {enabled ? 'Active — visible to other agents' : 'Inactive — not visible to other agents'}
+        {/* gRPC address */}
+        <div style={{ fontSize: '0.82em', color: 'var(--text-2)' }}>
+          Square: <code>{addr}</code>
+          {tunnelStatus?.connected_at && (
+            <span style={{ marginLeft: 12 }}>
+              · connected {relativeTime(tunnelStatus.connected_at)}
             </span>
-          </label>
+          )}
         </div>
 
-        {/* Disconnect */}
-        <div style={{ marginTop: 16 }}>
-          <button
-            type="button"
-            className="settings-remove-btn"
-            onClick={() => void handleDisconnect()}
+        {/* API key placeholder */}
+        <code style={{
+          display: 'block',
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border)',
+          borderRadius: 4,
+          padding: '5px 10px',
+          fontSize: '0.85em',
+          color: 'var(--text-2)',
+          letterSpacing: '0.1em',
+        }}>
+          {'•'.repeat(24)}
+        </code>
+
+        {/* Enable toggle */}
+        <label className="settings-field integration-toggle" style={{ cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
+          <span>Public — visible to other agents on the network</span>
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={e => void handleToggleEnabled(e.target.checked)}
             disabled={saving}
-          >
-            Disconnect
-          </button>
+          />
+        </label>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="settings-add-btn" onClick={startEditKey} disabled={saving}>Replace credentials</button>
+          <button type="button" className="settings-remove-btn" onClick={() => void handleDisconnect()} disabled={saving}>Disconnect</button>
         </div>
       </section>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Main render
-  // ---------------------------------------------------------------------------
+  function renderConnectionLog() {
+    return (
+      <section className="settings-group" style={{ marginBottom: 24 }}>
+        <h3 style={{ margin: '0 0 8px' }}>Connection log</h3>
+        <ConnectionLog entries={logEntries} logRef={logRef} />
+      </section>
+    );
+  }
+
+  function renderInboundProjectPicker() {
+    return (
+      <section className="settings-group" style={{ marginBottom: 24 }}>
+        <h3 style={{ margin: '0 0 4px' }}>Base project for inbound sessions</h3>
+        <p className="settings-help" style={{ marginBottom: 10 }}>
+          Inbound A2A requests will be assigned to this project. Leave empty for no project.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select
+            value={inboundProjectID}
+            onChange={e => {
+              setInboundProjectID(e.target.value);
+              void handleSaveInboundProject(e.target.value);
+            }}
+            disabled={savingProject}
+            style={{ flex: 1 }}
+          >
+            <option value="">— No project —</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {savingProject && <span style={{ fontSize: '0.82em', color: 'var(--text-2)' }}>Saving…</span>}
+        </div>
+      </section>
+    );
+  }
+
+  function renderInboundSessions() {
+    return (
+      <section>
+        <div className="integration-form-title-row" style={{ marginBottom: 4 }}>
+          <h3 style={{ margin: 0 }}>Inbound sessions</h3>
+          <button
+            type="button"
+            className="settings-add-btn"
+            style={{ fontSize: '0.78em', padding: '2px 8px' }}
+            onClick={() => void loadInboundSessions()}
+            disabled={sessionsLoading}
+          >
+            {sessionsLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+        <p className="settings-help" style={{ marginBottom: 14 }}>
+          Sessions created from inbound A2A requests.
+        </p>
+
+        {sessionsLoading && inboundSessions.length === 0 ? (
+          <div className="sessions-loading">Loading…</div>
+        ) : inboundSessions.length === 0 ? (
+          <p className="settings-help" style={{ fontStyle: 'italic' }}>No inbound sessions yet.</p>
+        ) : (
+          <div className="mcp-server-list">
+            {inboundSessions.map(sess => (
+              <article key={sess.id} className="integration-card mcp-server-card">
+                <div className="integration-card-headline">
+                  <div className="integration-card-title-wrap">
+                    <h3 style={{ display: 'flex', alignItems: 'center' }}>
+                      {statusDot(sess.status)}
+                      {sess.a2a_source_agent_name || 'Unknown agent'}
+                    </h3>
+                    <span className="integration-mode-chip">{sess.status}</span>
+                  </div>
+                  <span className="integration-updated">{relativeTime(sess.updated_at)}</span>
+                </div>
+
+                {sess.title && (
+                  <p style={{ margin: '6px 0 4px', color: 'var(--text-2)', fontSize: '0.88em', lineHeight: 1.5, fontStyle: 'italic' }}>
+                    "{sess.title}"
+                  </p>
+                )}
+
+                <div className="mcp-server-meta">
+                  <code style={{ fontSize: '0.78em', color: 'var(--text-2)' }}>
+                    {sess.a2a_source_agent_id && <>agent: {sess.a2a_source_agent_id} · </>}
+                    session: {sess.id} · started {relativeTime(sess.created_at)}
+                  </code>
+                </div>
+
+                <div className="integration-card-actions" style={{ marginTop: 8 }}>
+                  <a
+                    href={`/sessions/${sess.id}`}
+                    className="settings-add-btn"
+                    style={{ textDecoration: 'none', display: 'inline-block' }}
+                    onClick={e => {
+                      e.preventDefault();
+                      // Navigate via React Router if available, otherwise direct
+                      window.location.href = `/sessions/${sess.id}`;
+                    }}
+                  >
+                    Open session
+                  </a>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  // ---- Main render ----
 
   return (
     <div className="page-shell">
@@ -386,7 +618,7 @@ function A2AMyAgentView() {
 
       <div className="page-content page-content-narrow">
         <p className="settings-help">
-          Control how your agent participates in the A2A network. When connected and active, other agents registered on the Square registry can discover and contact yours.
+          Control how your agent participates in the A2A network. When connected and active, other agents on the Square registry can discover and contact yours.
         </p>
 
         {error && (
@@ -406,59 +638,17 @@ function A2AMyAgentView() {
           <div className="sessions-loading">Loading…</div>
         ) : (
           <>
-            {/* Not yet configured OR actively editing key */}
             {(!isConfigured || isEditingKey)
               ? renderConnectForm(isEditingKey)
               : renderConnectedPanel()
             }
 
-            {/* Inbound sessions — only shown once connected */}
             {isConfigured && !isEditingKey && (
-              <section>
-                <div className="integration-form-title-row" style={{ marginBottom: 4 }}>
-                  <h3 style={{ margin: 0 }}>Inbound sessions</h3>
-                  <span style={{ fontSize: '0.8em', color: 'var(--text-2)', fontStyle: 'italic' }}>mock data</span>
-                </div>
-                <p className="settings-help" style={{ marginBottom: 14 }}>
-                  Sessions initiated by other agents on the network. Full history and replay will be available once the A2A network is live.
-                </p>
-
-                <div className="mcp-server-list">
-                  {MOCK_INBOUND_SESSIONS.map(session => (
-                    <article key={session.id} className="integration-card mcp-server-card">
-                      <div className="integration-card-headline">
-                        <div className="integration-card-title-wrap">
-                          <h3 style={{ display: 'flex', alignItems: 'center' }}>
-                            {statusDot(session.status)}
-                            {session.remote_agent_name}
-                          </h3>
-                          <span className="integration-mode-chip">{session.status}</span>
-                          <span className="integration-mode-chip">{session.message_count} messages</span>
-                        </div>
-                        <span className="integration-updated">
-                          {relativeTime(session.last_message_at)}
-                        </span>
-                      </div>
-
-                      <p style={{ margin: '8px 0 6px', color: 'var(--text-2)', fontSize: '0.88em', lineHeight: 1.5, fontStyle: 'italic' }}>
-                        "{session.preview}"
-                      </p>
-
-                      <div className="mcp-server-meta">
-                        <code style={{ fontSize: '0.78em', color: 'var(--text-2)' }}>
-                          agent id: {session.remote_agent_id} · session: {session.id} · started {relativeTime(session.started_at)}
-                        </code>
-                      </div>
-
-                      <div className="integration-card-actions" style={{ marginTop: 8 }}>
-                        <button type="button" className="settings-add-btn" disabled title="Open session (coming soon)">
-                          Open session
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
+              <>
+                {renderConnectionLog()}
+                {renderInboundProjectPicker()}
+                {renderInboundSessions()}
+              </>
             )}
           </>
         )}
