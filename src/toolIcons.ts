@@ -1,5 +1,7 @@
 const TOOL_ICONS_BY_NAME: Record<string, string> = {
   bash: '💻',
+  code_execution: '🐍',
+  pipeline: '🔗',
   read: '📖',
   write: '📝',
   edit: '✏️',
@@ -7,6 +9,7 @@ const TOOL_ICONS_BY_NAME: Record<string, string> = {
   glob: '🗂️',
   find_files: '🔎',
   grep: '🔍',
+  filter: '🧹',
   take_screenshot_tool: '📸',
   take_camera_photo_tool: '📷',
   recurring_jobs_tool: '🕒',
@@ -107,6 +110,7 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   glob: 'file-system',
   find_files: 'file-system',
   grep: 'file-system',
+  filter: 'file-system',
   // Multimedia
   take_screenshot_tool: 'multimedia',
   take_camera_photo_tool: 'multimedia',
@@ -119,6 +123,8 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   fetch_url: 'web-network',
   // System
   bash: 'system',
+  code_execution: 'system',
+  pipeline: 'system',
   git_integration: 'system',
   // Task Management
   recurring_jobs_tool: 'task-management',
