@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   createIntegration,
+  deleteIntegration,
   getA2ATunnelStatus,
   getA2ATunnelStatusStreamUrl,
   getSettings,
@@ -391,10 +392,7 @@ function A2AMyAgentView() {
     setError(null);
     setSuccess(null);
     try {
-      await updateIntegration(integration.id, {
-        provider: 'a2_registry', name: integration.name, mode: 'duplex',
-        enabled: false, config: { api_key: '', square_grpc_addr: '', square_ws_url: '', transport: 'grpc' },
-      });
+      await deleteIntegration(integration.id);
       setApiKeyInput('');
       setGrpcAddrInput('');
       setWsUrlInput('');
