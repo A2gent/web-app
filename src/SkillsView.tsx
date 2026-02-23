@@ -13,7 +13,12 @@ import {
   updateSettings,
 } from './api';
 import { buildOpenInMyMindUrl } from './myMindNavigation';
-import { SKILLS_FOLDER_KEY } from './skills';
+import {
+  EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY,
+  parseDisabledExternalMarkdownSkills,
+  serializeDisabledExternalMarkdownSkills,
+  SKILLS_FOLDER_KEY,
+} from './skills';
 import { EmptyState, EmptyStateTitle } from './EmptyState';
 
 function getParentPath(path: string): string {
@@ -55,6 +60,8 @@ function SkillsView() {
   const [discoveredSkills, setDiscoveredSkills] = useState<SkillFile[]>([]);
   const [isDiscoveringSkills, setIsDiscoveringSkills] = useState(false);
   const [deletingSkills, setDeletingSkills] = useState<Set<string>>(new Set());
+  const [disabledSkillPaths, setDisabledSkillPaths] = useState<Set<string>>(new Set());
+  const [togglingSkills, setTogglingSkills] = useState<Set<string>>(new Set());
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<RegistrySkill[]>([]);
@@ -70,6 +77,7 @@ function SkillsView() {
       const loaded = await getSettings();
       setSettings(loaded);
       setConnectedFolder((loaded[SKILLS_FOLDER_KEY] || '').trim());
+      setDisabledSkillPaths(parseDisabledExternalMarkdownSkills(loaded[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY] || ''));
     } catch (loadError) {
       console.error('Failed to load skills settings:', loadError);
       setError(loadError instanceof Error ? loadError.message : 'Failed to load skills settings');
@@ -150,9 +158,17 @@ function SkillsView() {
       payload[SKILLS_FOLDER_KEY] = folder;
     }
 
+    const serializedDisabled = serializeDisabledExternalMarkdownSkills(disabledSkillPaths);
+    if (serializedDisabled === '') {
+      delete payload[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY];
+    } else {
+      payload[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY] = serializedDisabled;
+    }
+
     try {
       const saved = await updateSettings(payload);
       setSettings(saved);
+      setDisabledSkillPaths(parseDisabledExternalMarkdownSkills(saved[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY] || ''));
       setSuccess('Skills settings saved.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Failed to save skills settings');
@@ -237,6 +253,21 @@ function SkillsView() {
 
     try {
       await deleteSkill(skill.path);
+
+      if (disabledSkillPaths.has(skill.path)) {
+        const nextDisabled = new Set(disabledSkillPaths);
+        nextDisabled.delete(skill.path);
+        const payload: Record<string, string> = { ...settings };
+        const serializedDisabled = serializeDisabledExternalMarkdownSkills(nextDisabled);
+        if (serializedDisabled === '') {
+          delete payload[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY];
+        } else {
+          payload[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY] = serializedDisabled;
+        }
+        const saved = await updateSettings(payload);
+        setSettings(saved);
+        setDisabledSkillPaths(parseDisabledExternalMarkdownSkills(saved[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY] || ''));
+      }
       
       // Refresh discovered skills after deletion
       if (connectedFolder) {
@@ -247,6 +278,49 @@ function SkillsView() {
       setError(`Failed to delete "${skill.name}": ${deleteError instanceof Error ? deleteError.message : 'Unknown error'}`);
     } finally {
       setDeletingSkills(prev => {
+        const next = new Set(prev);
+        next.delete(skill.path);
+        return next;
+      });
+    }
+  };
+
+  const handleToggleSkill = async (skill: SkillFile, enabled: boolean) => {
+    if (togglingSkills.has(skill.path)) {
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+    setTogglingSkills((prev) => new Set(prev).add(skill.path));
+
+    const previousDisabled = new Set(disabledSkillPaths);
+    const nextDisabled = new Set(disabledSkillPaths);
+    if (enabled) {
+      nextDisabled.delete(skill.path);
+    } else {
+      nextDisabled.add(skill.path);
+    }
+    setDisabledSkillPaths(nextDisabled);
+
+    try {
+      const payload: Record<string, string> = { ...settings };
+      const serializedDisabled = serializeDisabledExternalMarkdownSkills(nextDisabled);
+      if (serializedDisabled === '') {
+        delete payload[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY];
+      } else {
+        payload[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY] = serializedDisabled;
+      }
+
+      const saved = await updateSettings(payload);
+      setSettings(saved);
+      setDisabledSkillPaths(parseDisabledExternalMarkdownSkills(saved[EXTERNAL_MARKDOWN_DISABLED_SKILLS_KEY] || ''));
+      setSuccess(`Skill "${skill.name}" ${enabled ? 'enabled' : 'disabled'}.`);
+    } catch (toggleError) {
+      setDisabledSkillPaths(previousDisabled);
+      setError(toggleError instanceof Error ? toggleError.message : `Failed to ${enabled ? 'enable' : 'disable'} skill`);
+    } finally {
+      setTogglingSkills((prev) => {
         const next = new Set(prev);
         next.delete(skill.path);
         return next;
@@ -321,9 +395,39 @@ function SkillsView() {
                 {!isDiscoveringSkills && discoveredSkills.length > 0 ? (
                   <div className="skills-external-grid">
                     {discoveredSkills.map((skill) => (
-                      <div key={skill.path} className="skill-card skill-card-external">
+                      <div
+                        key={skill.path}
+                        className={`skill-card skill-card-external ${disabledSkillPaths.has(skill.path) ? 'skill-card-disabled' : ''}`}
+                      >
                         <div className="skill-card-title-row">
                           <h3>{skill.name}</h3>
+                          <div className="skill-card-actions">
+                            <button
+                              type="button"
+                              className={`ios-switch ${!disabledSkillPaths.has(skill.path) ? 'on' : ''}`}
+                              role="switch"
+                              aria-checked={!disabledSkillPaths.has(skill.path)}
+                              aria-label={`${!disabledSkillPaths.has(skill.path) ? 'Disable' : 'Enable'} skill ${skill.name}`}
+                              onClick={() => void handleToggleSkill(skill, disabledSkillPaths.has(skill.path))}
+                              disabled={togglingSkills.has(skill.path)}
+                              title={togglingSkills.has(skill.path) ? 'Saving...' : (!disabledSkillPaths.has(skill.path) ? 'Disable skill' : 'Enable skill')}
+                            >
+                              <span className="ios-switch-thumb" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="skill-enabled-label">{disabledSkillPaths.has(skill.path) ? 'Disabled' : 'Enabled'}</p>
+                        {skill.description && (
+                          <p className="skill-card-description">{skill.description}</p>
+                        )}
+                        <div className="skill-card-meta skill-card-meta-bottom">
+                          <Link
+                            to={buildOpenInMyMindUrl(skill.path)}
+                            className="skill-card-meta-link"
+                            title={`Open ${skill.path} in My Mind`}
+                          >
+                            {skill.relative_path}
+                          </Link>
                           <button
                             type="button"
                             className="skill-delete-btn"
@@ -333,18 +437,6 @@ function SkillsView() {
                           >
                             🗑️
                           </button>
-                        </div>
-                        {skill.description && (
-                          <p className="skill-card-description">{skill.description}</p>
-                        )}
-                        <div className="skill-card-meta">
-                          <Link
-                            to={buildOpenInMyMindUrl(skill.path)}
-                            className="skill-card-meta-link"
-                            title={`Open ${skill.path} in My Mind`}
-                          >
-                            {skill.relative_path}
-                          </Link>
                         </div>
                       </div>
                     ))}

@@ -3919,6 +3919,24 @@ body.mind-resizing * {
   gap: 8px;
 }
 
+.skill-card-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.skill-enabled-label {
+  margin: 0;
+  color: #95a1b2;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.skill-card-disabled {
+  opacity: 0.72;
+  border-color: #5f6066;
+}
+
 .skill-card-title-row h3 {
   margin: 0;
   font-size: 16px;
@@ -3958,6 +3976,14 @@ body.mind-resizing * {
   color: #95a1b2;
   font-size: 12px;
   word-break: break-word;
+}
+
+.skill-card-meta-bottom {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .skill-card-meta-link {
@@ -4226,6 +4252,7 @@ body.mind-resizing * {
   cursor: pointer;
   transition: all 0.2s;
   opacity: 0.5;
+  flex-shrink: 0;
 }
 
 .skill-delete-btn:hover:not(:disabled) {
