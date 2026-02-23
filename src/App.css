@@ -3919,6 +3919,25 @@ body.mind-resizing * {
   gap: 8px;
 }
 
+.skill-card-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.skill-enabled-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.skill-enabled-checkbox input[type="checkbox"] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
 .skill-card-actions {
   display: inline-flex;
   align-items: center;

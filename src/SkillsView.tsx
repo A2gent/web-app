@@ -332,6 +332,9 @@ function SkillsView() {
     <div className="page-shell">
       <div className="page-header">
         <h1>Skills</h1>
+        <button type="button" className="settings-save-btn" onClick={() => void saveSkillsSettings()} disabled={isSaving || isLoading}>
+          {isSaving ? 'Saving...' : 'Save skills'}
+        </button>
       </div>
 
       {error ? (
@@ -568,12 +571,6 @@ function SkillsView() {
                   <p className="settings-help">No skills found for "{searchQuery}"</p>
                 )}
               </div>
-            </div>
-
-            <div className="settings-panel">
-              <button type="button" className="settings-save-btn" onClick={() => void saveSkillsSettings()} disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Save skills'}
-              </button>
             </div>
           </>
         )}

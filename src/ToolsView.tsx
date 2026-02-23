@@ -27,6 +27,7 @@ import {
   CAMERA_INDEX,
   CAMERA_OUTPUT_DIR,
   CHROME_HEADLESS,
+  DISABLED_TOOLS_KEY,
   ELEVENLABS_SPEED,
   ELEVENLABS_SPEED_OPTIONS,
   ELEVENLABS_VOICE_ID,
@@ -35,6 +36,8 @@ import {
   WHISPER_TRANSLATE,
   SCREENSHOT_DISPLAY_INDEX,
   SCREENSHOT_OUTPUT_DIR,
+  parseDisabledTools,
+  serializeDisabledTools,
   GIT_COMMIT_PROMPT_TEMPLATE,
   GIT_COMMIT_PROVIDER,
   speedToOptionIndex,
@@ -176,6 +179,7 @@ function ToolsView() {
 
   const [builtInSkills, setBuiltInSkills] = useState<BuiltInSkill[]>([]);
   const [integrationSkills, setIntegrationSkills] = useState<IntegrationBackedSkill[]>([]);
+  const [disabledTools, setDisabledTools] = useState<Set<string>>(new Set());
 
   // Group built-in skills by category
   const groupedBuiltInSkills = useMemo(() => {
@@ -275,6 +279,7 @@ function ToolsView() {
       setCameraOutputDir(loaded[CAMERA_OUTPUT_DIR] || '/tmp');
       setCameraIndex(loaded[CAMERA_INDEX] || '');
       setChromeHeadless((loaded[CHROME_HEADLESS] || '').trim().toLowerCase() === 'true');
+      setDisabledTools(parseDisabledTools(loaded[DISABLED_TOOLS_KEY] || ''));
       setGitCommitProvider((loaded[GIT_COMMIT_PROVIDER] || '').trim());
       setGitCommitPromptTemplate(loaded[GIT_COMMIT_PROMPT_TEMPLATE] || DEFAULT_GIT_COMMIT_PROMPT_TEMPLATE);
     } catch (loadError) {
@@ -638,10 +643,17 @@ function ToolsView() {
     } else {
       payload[GIT_COMMIT_PROMPT_TEMPLATE] = gitPromptTemplate;
     }
+    const serializedDisabledTools = serializeDisabledTools(disabledTools);
+    if (serializedDisabledTools === '') {
+      delete payload[DISABLED_TOOLS_KEY];
+    } else {
+      payload[DISABLED_TOOLS_KEY] = serializedDisabledTools;
+    }
 
     try {
       const saved = await updateSettings(payload);
       setSettings(saved);
+      setDisabledTools(parseDisabledTools(saved[DISABLED_TOOLS_KEY] || ''));
       setSuccess('Tools settings saved.');
       setHasAttemptedVoiceLoad(false);
       await loadVoices();
@@ -656,6 +668,9 @@ function ToolsView() {
     <div className="page-shell">
       <div className="page-header">
         <h1>Tools</h1>
+        <button type="button" className="settings-save-btn" onClick={() => void saveToolsSettings()} disabled={isSaving || isLoading}>
+          {isSaving ? 'Saving...' : 'Save tools'}
+        </button>
       </div>
 
       {error ? (
@@ -679,7 +694,7 @@ function ToolsView() {
             <div className="settings-panel">
               <h2>Built-in skills</h2>
               <p className="settings-help">
-                Built-in skills are always available to the agent. They can be invoked by agent logic as part of the session flow.
+                Built-in skills can be enabled or disabled per agent. Disabled tools are removed from agent tool calls until you re-enable them.
               </p>
               {groupedBuiltInSkills.length === 0 ? (
                 <div className="sessions-loading">Loading skills...</div>
@@ -706,7 +721,26 @@ function ToolsView() {
                                 )}
                                 <span>{skill.name}</span>
                               </h3>
-                              <span className="skill-badge">{skill.kind === 'tool' ? 'Tool' : 'Built-in'}</span>
+                              <div className="skill-card-title-actions">
+                                <label className="skill-enabled-checkbox">
+                                  <input
+                                    type="checkbox"
+                                    checked={!disabledTools.has(skill.name)}
+                                    onChange={(event) => {
+                                      const checked = event.target.checked;
+                                      setDisabledTools((prev) => {
+                                        const next = new Set(prev);
+                                        if (checked) {
+                                          next.delete(skill.name);
+                                        } else {
+                                          next.add(skill.name);
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                </label>
+                              </div>
                             </div>
                             <p>{skill.description}</p>
                             {skill.name === 'take_screenshot_tool' ? (
@@ -1157,12 +1191,6 @@ function ToolsView() {
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="settings-panel">
-              <button type="button" className="settings-save-btn" onClick={() => void saveToolsSettings()} disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Save tools'}
-              </button>
             </div>
           </>
         )}

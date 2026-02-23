@@ -20,6 +20,7 @@ interface SettingsPanelProps {
   settings: Record<string, string>;
   isSaving: boolean;
   onSave: (settings: Record<string, string>) => Promise<void>;
+  saveRequestKey?: number;
   defaultSystemPrompt?: string;
   defaultSystemPromptWithoutBuiltInTools?: string;
 }
@@ -154,6 +155,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   settings,
   isSaving,
   onSave,
+  saveRequestKey = 0,
   defaultSystemPrompt = '',
   defaultSystemPromptWithoutBuiltInTools = '',
 }) => {
@@ -208,10 +210,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const compactionTriggerProgress = Number.isFinite(compactionTriggerValue)
     ? Math.max(5, Math.min(100, compactionTriggerValue))
     : Number.parseFloat(DEFAULT_COMPACTION_TRIGGER);
-
-  const canSave = useMemo(() => {
-    return !isSaving;
-  }, [isSaving]);
 
   const estimatedBlocks = instructionEstimate?.blocks || [];
   const instructionBlockEstimatedTokens = useMemo(() => {
@@ -401,6 +399,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
       setSaveError(error instanceof Error ? error.message : 'Failed to save settings');
     }
   };
+
+  useEffect(() => {
+    if (saveRequestKey <= 0) {
+      return;
+    }
+    void handleSave();
+  }, [saveRequestKey]);
 
   return (
     <>
@@ -683,9 +688,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         {saveError && <div className="settings-error">{saveError}</div>}
         {saveSuccess && <div className="settings-success">{saveSuccess}</div>}
 
-        <button type="button" onClick={handleSave} className="settings-save-btn" disabled={!canSave}>
-          {isSaving ? 'Saving...' : 'Save settings'}
-        </button>
       </div>
     </>
   );

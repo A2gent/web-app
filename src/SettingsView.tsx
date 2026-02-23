@@ -25,6 +25,7 @@ function SettingsView({ onAgentNameRefresh }: SettingsViewProps) {
   const [apiBaseUrlInput, setApiBaseUrlInput] = useState(() => getApiBaseUrl());
   const [apiBaseUrlHistory, setApiBaseUrlHistory] = useState<string[]>(() => getApiBaseUrlHistory());
   const [apiBaseUrlMessage, setApiBaseUrlMessage] = useState<string | null>(null);
+  const [saveRequestKey, setSaveRequestKey] = useState(0);
 
   const loadSettings = async () => {
     try {
@@ -95,6 +96,14 @@ function SettingsView({ onAgentNameRefresh }: SettingsViewProps) {
     <div className="page-shell">
       <div className="page-header">
         <h1>Settings</h1>
+        <button
+          type="button"
+          className="settings-save-btn"
+          onClick={() => setSaveRequestKey((prev) => prev + 1)}
+          disabled={isLoading || isSaving}
+        >
+          {isSaving ? 'Saving...' : 'Save settings'}
+        </button>
       </div>
 
       {error && (
@@ -137,6 +146,7 @@ function SettingsView({ onAgentNameRefresh }: SettingsViewProps) {
             settings={settings}
             isSaving={isSaving}
             onSave={handleSaveSettings}
+            saveRequestKey={saveRequestKey}
             defaultSystemPrompt={defaultSystemPrompt}
             defaultSystemPromptWithoutBuiltInTools={defaultSystemPromptWithoutBuiltInTools}
           />

@@ -356,6 +356,7 @@ export interface BuiltInSkill {
   name: string;
   kind: string;
   description: string;
+  enabled?: boolean;
 }
 
 export interface BuiltInSkillsResponse {
