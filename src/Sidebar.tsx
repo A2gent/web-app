@@ -53,6 +53,7 @@ const navSections: NavSection[] = [
     id: 'a2a',
     label: '🌐 A2 Network',
     items: [
+      { id: 'a2a-local-agents', label: '🐳 Local agents', path: '/a2a/local-agents' },
       { id: 'a2a-registry', label: '📡 A2 Registry', path: '/a2a' },
       { id: 'a2a-my-agent', label: '🤖 My agent', path: '/a2a/my-agent' },
     ],

@@ -814,6 +814,141 @@ export function getA2ATunnelStatusStreamUrl(): string {
   return `${getApiBaseUrl()}/integrations/a2_registry/tunnel-status/stream`;
 }
 
+// ---- Local Dockerized A2 agents ----
+
+export interface LocalDockerAgent {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+  created_at?: string;
+  ports?: string;
+  labels?: Record<string, string>;
+  managed: boolean;
+  running: boolean;
+  host_port?: number;
+  api_url?: string;
+}
+
+export interface LocalDockerAgentsResponse {
+  agents: LocalDockerAgent[];
+}
+
+export interface CreateLocalDockerAgentRequest {
+  name?: string;
+  image?: string;
+  host_port?: number;
+  lm_studio_base_url?: string;
+}
+
+export interface RegisterLocalDockerAgentRequest {
+  registry_url?: string;
+  owner_email: string;
+  agent_name?: string;
+  description?: string;
+  configure_container?: boolean;
+  square_grpc_addr?: string;
+}
+
+export interface RegisterLocalDockerAgentResponse {
+  registry_agent_id: string;
+  registry_agent_name: string;
+  registry_api_key: string;
+  registry_url: string;
+  container_name: string;
+  container_id: string;
+  container_host_port: number;
+  container_api_url: string;
+  container_configured: boolean;
+  container_integration_id?: string;
+  container_tunnel_state?: string;
+  container_tunnel_note?: string;
+}
+
+export async function listLocalDockerAgents(): Promise<LocalDockerAgentsResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/integrations/a2_registry/local-agents`);
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to list local Docker agents');
+  }
+  return response.json();
+}
+
+export async function createLocalDockerAgent(payload: CreateLocalDockerAgentRequest): Promise<LocalDockerAgent> {
+  const response = await fetch(`${getApiBaseUrl()}/integrations/a2_registry/local-agents`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to create local Docker agent');
+  }
+  return response.json();
+}
+
+export async function startLocalDockerAgent(containerID: string): Promise<LocalDockerAgent> {
+  const response = await fetch(`${getApiBaseUrl()}/integrations/a2_registry/local-agents/${encodeURIComponent(containerID)}/start`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to start local Docker agent');
+  }
+  return response.json();
+}
+
+export async function stopLocalDockerAgent(containerID: string): Promise<LocalDockerAgent> {
+  const response = await fetch(`${getApiBaseUrl()}/integrations/a2_registry/local-agents/${encodeURIComponent(containerID)}/stop`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to stop local Docker agent');
+  }
+  return response.json();
+}
+
+export async function removeLocalDockerAgent(containerID: string, force = false): Promise<void> {
+  const response = await fetch(`${getApiBaseUrl()}/integrations/a2_registry/local-agents/${encodeURIComponent(containerID)}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ force }),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to remove local Docker agent');
+  }
+}
+
+export async function getLocalDockerAgentLogs(containerID: string, tail = 200): Promise<{ container: string; tail: number; logs: string }> {
+  const params = new URLSearchParams({ tail: String(tail) });
+  const response = await fetch(
+    `${getApiBaseUrl()}/integrations/a2_registry/local-agents/${encodeURIComponent(containerID)}/logs?${params.toString()}`,
+  );
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to read local Docker agent logs');
+  }
+  return response.json();
+}
+
+export async function registerLocalDockerAgent(
+  containerID: string,
+  payload: RegisterLocalDockerAgentRequest,
+): Promise<RegisterLocalDockerAgentResponse> {
+  const response = await fetch(`${getApiBaseUrl()}/integrations/a2_registry/local-agents/${encodeURIComponent(containerID)}/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await buildApiError(response, 'Failed to register local Docker agent in A2 registry');
+  }
+  return response.json();
+}
+
 export async function getSession(sessionId: string): Promise<Session> {
   const response = await fetch(`${getApiBaseUrl()}/sessions/${sessionId}`);
   if (!response.ok) {

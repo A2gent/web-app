@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { listIntegrations } from './api';
+import { listIntegrations, updateIntegration, type Integration } from './api';
 import {
   clearStoredLocalA2AAgentID,
   fetchRegistrySelfAgent,
+  getStoredA2ARegistryOwnerEmail,
   getStoredA2ARegistryURL,
   getStoredLocalA2AAgentID,
+  storeA2ARegistryOwnerEmail,
   storeLocalA2AAgentID,
 } from './a2aIdentity';
 
@@ -141,7 +143,9 @@ function A2ARegistryView() {
   const [isEditingUrl, setIsEditingUrl] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [result, setResult] = useState<DiscoveryResponse | null>(null);
   const [usingMock, setUsingMock] = useState(false);
 
@@ -149,6 +153,8 @@ function A2ARegistryView() {
   const [filterType, setFilterType] = useState<AgentType | ''>('');
   const [filterStatus, setFilterStatus] = useState<AgentStatus | ''>('');
   const [localAgentID, setLocalAgentID] = useState<string>(getStoredLocalA2AAgentID());
+  const [registryIntegration, setRegistryIntegration] = useState<Integration | null>(null);
+  const [ownerEmail, setOwnerEmail] = useState<string>(getStoredA2ARegistryOwnerEmail());
 
   useEffect(() => {
     const prefilled = searchParams.get('agent_id')?.trim();
@@ -163,6 +169,12 @@ function A2ARegistryView() {
       try {
         const integrations = await listIntegrations();
         const integration = integrations.find(i => i.provider === 'a2_registry');
+        setRegistryIntegration(integration ?? null);
+        const configuredOwnerEmail = integration?.config?.owner_email?.trim() || '';
+        if (configuredOwnerEmail) {
+          setOwnerEmail(configuredOwnerEmail);
+          storeA2ARegistryOwnerEmail(configuredOwnerEmail);
+        }
         const apiKey = integration?.config?.api_key?.trim() || '';
         if (!apiKey) {
           clearStoredLocalA2AAgentID();
@@ -178,6 +190,43 @@ function A2ARegistryView() {
     };
     void resolveSelfAgentID();
   }, [registryUrl]);
+
+  const handleSaveRegistrySettings = async () => {
+    const normalized = ownerEmail.trim();
+    if (!normalized) {
+      setError('Owner email is required.');
+      return;
+    }
+
+    setSavingSettings(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      storeA2ARegistryOwnerEmail(normalized);
+      if (registryIntegration) {
+        await updateIntegration(registryIntegration.id, {
+          provider: 'a2_registry',
+          name: registryIntegration.name || 'A2 Registry',
+          mode: 'duplex',
+          enabled: registryIntegration.enabled,
+          config: {
+            ...registryIntegration.config,
+            owner_email: normalized,
+          },
+        });
+        setSuccess('A2 Registry settings saved.');
+        const integrations = await listIntegrations();
+        const refreshed = integrations.find(i => i.provider === 'a2_registry') ?? null;
+        setRegistryIntegration(refreshed);
+      } else {
+        setSuccess('Owner email saved locally. It will sync to integration after "My agent" is connected.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save A2 Registry settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const commitUrl = () => {
     const normalized = urlDraft.trim().replace(/\/$/, '');
@@ -246,6 +295,13 @@ function A2ARegistryView() {
           Browse and discover agents registered on the Square A2A network. Connect to a local or remote registry to list available agents and their capabilities.
         </p>
 
+        {success && (
+          <div className="success-banner" style={{ marginBottom: 16 }}>
+            {success}
+            <button onClick={() => setSuccess(null)} className="error-dismiss">×</button>
+          </div>
+        )}
+
         <section className="a2a-config-block">
           {/* Registry URL */}
           <div className="settings-group" style={{ marginBottom: 16 }}>
@@ -291,6 +347,31 @@ function A2ARegistryView() {
               <code>{localAgentID}</code>
             </div>
           )}
+
+          <div className="settings-group" style={{ marginTop: 14, marginBottom: 0 }}>
+            <div className="integration-form-title-row">
+              <h3 style={{ margin: 0 }}>Owner email</h3>
+            </div>
+            <label className="settings-field" style={{ gap: 6 }}>
+              <span>Used when registering local Docker agents into this registry.</span>
+              <input
+                type="email"
+                value={ownerEmail}
+                onChange={e => setOwnerEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </label>
+            <div>
+              <button
+                type="button"
+                className="settings-save-btn"
+                onClick={() => void handleSaveRegistrySettings()}
+                disabled={savingSettings || !ownerEmail.trim()}
+              >
+                {savingSettings ? 'Saving...' : 'Save registry settings'}
+              </button>
+            </div>
+          </div>
         </section>
 
         {/* Filters */}

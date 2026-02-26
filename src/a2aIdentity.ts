@@ -1,5 +1,6 @@
 const A2A_LOCAL_AGENT_ID_KEY = 'a2gent.a2a_local_agent_id';
 const A2A_REGISTRY_URL_KEY = 'a2gent.a2a_registry_url';
+const A2A_REGISTRY_OWNER_EMAIL_KEY = 'a2gent.a2a_registry_owner_email';
 const DEFAULT_REGISTRY_URL = 'http://localhost:5174';
 
 export interface RegistrySelfAgent {
@@ -64,4 +65,17 @@ export function storeLocalA2AAgentID(agentID: string): void {
 
 export function clearStoredLocalA2AAgentID(): void {
   localStorage.removeItem(A2A_LOCAL_AGENT_ID_KEY);
+}
+
+export function getStoredA2ARegistryOwnerEmail(): string {
+  return localStorage.getItem(A2A_REGISTRY_OWNER_EMAIL_KEY)?.trim() || '';
+}
+
+export function storeA2ARegistryOwnerEmail(email: string): void {
+  const normalized = email.trim();
+  if (!normalized) {
+    localStorage.removeItem(A2A_REGISTRY_OWNER_EMAIL_KEY);
+    return;
+  }
+  localStorage.setItem(A2A_REGISTRY_OWNER_EMAIL_KEY, normalized);
 }

@@ -23,6 +23,7 @@ import {
 import {
   clearStoredLocalA2AAgentID,
   fetchRegistrySelfAgent,
+  getStoredA2ARegistryOwnerEmail,
   getStoredA2ARegistryURL,
   getStoredLocalA2AAgentID,
   storeLocalA2AAgentID,
@@ -337,6 +338,7 @@ function A2AMyAgentView() {
         transport,
         square_grpc_addr: grpcAddr,
         square_ws_url: wsUrl,
+        owner_email: (integration?.config?.owner_email ?? '').trim() || getStoredA2ARegistryOwnerEmail(),
       };
       if (integration) {
         await updateIntegration(integration.id, {
@@ -754,7 +756,6 @@ function A2AMyAgentView() {
   }
 
   // ---- Main render ----
-
   return (
     <div className="page-shell">
       <div className="page-header">
