@@ -13,11 +13,11 @@ import {
   sendMessageStream,
   getPendingQuestion,
   answerQuestion,
-  listProviderModels,
   createSession,
-  getSettings,
+  listSubAgents,
   type LLMProviderType,
   type ProviderConfig,
+  type SubAgent,
   type Session,
   type Message,
   type MessageImage,
@@ -364,6 +364,21 @@ function dedupeProviderFailures(items: ProviderFailure[]): ProviderFailure[] {
   return out;
 }
 
+function linkedSessionDefaultPrompt(linkType: 'review' | 'continuation', sourceSession: Session): string {
+  const sourceTitle = (sourceSession.title || `Session ${sourceSession.id.slice(0, 8)}`).trim();
+  if (linkType === 'review') {
+    return [
+      `Review the results of parent session "${sourceTitle}" (${sourceSession.id}).`,
+      'Focus on file changes (created, updated, deleted), regressions, correctness risks, and missing tests.',
+      'Return findings ordered by severity with concrete file references and concise fix suggestions.',
+    ].join(' ');
+  }
+  return [
+    `Continue the implementation from parent session "${sourceTitle}" (${sourceSession.id}).`,
+    'Start with a short summary of current state and then proceed with the highest-priority remaining work.',
+  ].join(' ');
+}
+
 function ChatView() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -381,11 +396,12 @@ function ChatView() {
   const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const [questionAnswer, setQuestionAnswer] = useState<string>('');
   const [projectName, setProjectName] = useState<string | null>(null);
-  const [showModelSwitcher, setShowModelSwitcher] = useState(false);
-  const [switcherProvider, setSwitcherProvider] = useState<LLMProviderType>('');
-  const [switcherModel, setSwitcherModel] = useState<string>('');
-  const [switcherModels, setSwitcherModels] = useState<string[]>([]);
-  const [isSwitchingModel, setIsSwitchingModel] = useState(false);
+  const [subAgents, setSubAgents] = useState<SubAgent[]>([]);
+  const [showLinkedSessionModal, setShowLinkedSessionModal] = useState(false);
+  const [linkedSessionType, setLinkedSessionType] = useState<'review' | 'continuation'>('review');
+  const [linkedSessionAgent, setLinkedSessionAgent] = useState<string>('build');
+  const [linkedSessionPrompt, setLinkedSessionPrompt] = useState<string>('');
+  const [isCreatingLinkedSession, setIsCreatingLinkedSession] = useState(false);
   const [providerTrace, setProviderTrace] = useState<string>('');
 
   const SESSION_POLL_INTERVAL_MS = 2000; // Poll every 2 seconds for active sessions
@@ -469,35 +485,25 @@ function ChatView() {
     loadProviders();
   }, []);
 
-  // Load available models when model switcher is opened and provider is selected
   useEffect(() => {
-    if (!showModelSwitcher || !switcherProvider) {
-      setSwitcherModels([]);
-      return;
-    }
-
-    const loadModels = async () => {
+    const loadSubAgents = async () => {
       try {
-        const models = await listProviderModels(switcherProvider);
-        setSwitcherModels(models);
+        const data = await listSubAgents();
+        setSubAgents(data);
       } catch (err) {
-        console.error('Failed to load models:', err);
-        setSwitcherModels([]);
+        console.error('Failed to load sub-agents:', err);
+        setSubAgents([]);
       }
     };
+    void loadSubAgents();
+  }, []);
 
-    void loadModels();
-  }, [showModelSwitcher, switcherProvider]);
-
-  // Initialize switcher values when opening
   useEffect(() => {
-    if (showModelSwitcher && session) {
-      const currentProvider = session.provider || '';
-      const currentModel = session.model || '';
-      setSwitcherProvider(currentProvider);
-      setSwitcherModel(currentModel);
+    if (!showLinkedSessionModal || !session) {
+      return;
     }
-  }, [showModelSwitcher, session]);
+    setLinkedSessionPrompt(linkedSessionDefaultPrompt(linkedSessionType, session));
+  }, [showLinkedSessionModal, linkedSessionType, session]);
 
   // Poll active sessions for real-time updates
   // This handles:
@@ -821,31 +827,36 @@ function ChatView() {
     setQuestionAnswer(answer);
   };
 
-  const handleSwitchModel = async () => {
-    if (!session || !switcherProvider) return;
-
-    setIsSwitchingModel(true);
+  const handleCreateLinkedSession = async () => {
+    if (!session) return;
+    setIsCreatingLinkedSession(true);
     try {
-      const settings = await getSettings();
-      const sessionsDir = settings['AAGENT_SESSIONS_FOLDER'] || '~/.local/share/aagent/sessions';
-      const jsonlPath = `${sessionsDir}/${session.id}.jsonl`;
+      const selected = linkedSessionAgent.trim();
+      const isSubAgent = selected.startsWith('subagent:');
+      const subAgentID = isSubAgent ? selected.slice('subagent:'.length) : undefined;
+      const prompt = linkedSessionPrompt.trim();
 
       const newSession = await createSession({
-        agent_id: session.agent_id,
-        provider: switcherProvider,
-        model: switcherModel || undefined,
+        agent_id: 'build',
+        parent_id: session.id,
+        link_type: linkedSessionType,
         project_id: session.project_id,
-        task: `Continue previous session which was stored in this file: ${jsonlPath}`
+        sub_agent_id: subAgentID,
+        task: prompt || linkedSessionDefaultPrompt(linkedSessionType, session),
       });
 
-      navigate(`/chat/${newSession.id}`);
-      setShowModelSwitcher(false);
+      navigate(`/chat/${newSession.id}`, {
+        state: {
+          initialMessage: prompt || linkedSessionDefaultPrompt(linkedSessionType, session),
+        },
+      });
+      setShowLinkedSessionModal(false);
       setError(null);
     } catch (err) {
-      console.error('Failed to switch model:', err);
-      setError(err instanceof Error ? err.message : 'Failed to switch model');
+      console.error('Failed to create linked session:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create linked session');
     } finally {
-      setIsSwitchingModel(false);
+      setIsCreatingLinkedSession(false);
     }
   };
 
@@ -873,17 +884,29 @@ function ChatView() {
                   ) : null}
                   <span className="session-title">{session.title || 'Untitled Session'}</span>
                 {session.provider ? (
-                  <button
+                  <span
                     className="session-provider-chip"
-                    onClick={() => setShowModelSwitcher(true)}
                     title={session.provider === 'automatic_router' && routedTarget
-                      ? `Provider: ${session.provider} → ${routedTarget}. Click to switch model`
-                      : `Provider: ${session.provider}${session.model ? ` / ${session.model}` : ''}. Click to switch model`}
+                      ? `Provider: ${session.provider} → ${routedTarget}`
+                      : `Provider: ${session.provider}${session.model ? ` / ${session.model}` : ''}`}
                   >
                     {session.provider === 'automatic_router' && routedTarget
                       ? `→ ${routedTarget}`
                       : session.provider}
                     {session.provider !== 'automatic_router' && session.model ? ` / ${session.model}` : ''}
+                  </span>
+                ) : null}
+                {session ? (
+                  <button
+                    className="session-linked-btn"
+                    onClick={() => {
+                      setLinkedSessionType('review');
+                      setLinkedSessionAgent('build');
+                      setShowLinkedSessionModal(true);
+                    }}
+                    title="Create linked session"
+                  >
+                    Linked Session
                   </button>
                 ) : null}
                 {(session.input_tokens ?? 0) > 0 || (session.output_tokens ?? 0) > 0 ? (
@@ -1002,65 +1025,62 @@ function ChatView() {
         ) : null}
       />
 
-      {showModelSwitcher && (
-        <div className="modal-overlay" onClick={() => setShowModelSwitcher(false)}>
+      {showLinkedSessionModal && (
+        <div className="modal-overlay" onClick={() => setShowLinkedSessionModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Switch Model</h3>
-              <button className="modal-close" onClick={() => setShowModelSwitcher(false)}>×</button>
+              <h3>Create linked session</h3>
+              <button className="modal-close" onClick={() => setShowLinkedSessionModal(false)}>×</button>
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label>Provider</label>
+                <label>Type</label>
                 <select
-                  value={switcherProvider}
-                  onChange={(e) => setSwitcherProvider(e.target.value as LLMProviderType)}
+                  value={linkedSessionType}
+                  onChange={(e) => setLinkedSessionType(e.target.value as 'review' | 'continuation')}
                 >
-                  <option value="">Select provider...</option>
-                  {providers.map((provider) => (
-                    <option key={provider.type} value={provider.type}>
-                      {provider.display_name}
+                  <option value="review">Review file changes</option>
+                  <option value="continuation">Continue with another agent</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Agent</label>
+                <select
+                  value={linkedSessionAgent}
+                  onChange={(e) => setLinkedSessionAgent(e.target.value)}
+                >
+                  <option value="build">Default agent</option>
+                  {subAgents.map((subAgent) => (
+                    <option key={subAgent.id} value={`subagent:${subAgent.id}`}>
+                      {subAgent.name}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="form-group">
-                <label>Model</label>
-                <select
-                  value={switcherModel}
-                  onChange={(e) => setSwitcherModel(e.target.value)}
-                  disabled={!switcherProvider || switcherModels.length === 0}
-                >
-                  <option value="">{switcherModels.length === 0 ? 'Enter model manually or select...' : 'Select model...'}</option>
-                  {switcherModels.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  value={switcherModel}
-                  onChange={(e) => setSwitcherModel(e.target.value)}
-                  placeholder="Or type model name..."
+                <label>Initial prompt</label>
+                <textarea
+                  value={linkedSessionPrompt}
+                  onChange={(e) => setLinkedSessionPrompt(e.target.value)}
                   className="model-input"
+                  rows={4}
                 />
               </div>
             </div>
             <div className="modal-footer">
               <button
                 className="btn-secondary"
-                onClick={() => setShowModelSwitcher(false)}
-                disabled={isSwitchingModel}
+                onClick={() => setShowLinkedSessionModal(false)}
+                disabled={isCreatingLinkedSession}
               >
                 Cancel
               </button>
               <button
                 className="btn-primary"
-                onClick={handleSwitchModel}
-                disabled={!switcherProvider || isSwitchingModel}
+                onClick={handleCreateLinkedSession}
+                disabled={isCreatingLinkedSession}
               >
-                {isSwitchingModel ? 'Switching...' : 'Switch Model'}
+                {isCreatingLinkedSession ? 'Creating...' : 'Create linked session'}
               </button>
             </div>
           </div>

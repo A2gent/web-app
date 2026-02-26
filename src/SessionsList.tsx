@@ -26,6 +26,11 @@ interface SessionsListProps {
   title?: string; // Optional title override
 }
 
+type SessionListRow = {
+  session: Session;
+  depth: number;
+};
+
 function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -242,6 +247,11 @@ function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) 
   };
 
   const isChildSession = (session: Session) => Boolean(session.parent_id);
+  const linkTypeLabel = (session: Session) => {
+    if (session.link_type === 'review') return 'Review';
+    if (session.link_type === 'continuation') return 'Continuation';
+    return '';
+  };
 
   const formatStatusLabel = (status: string) => {
     const normalized = status.trim();
@@ -291,6 +301,32 @@ function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) 
     if (!aIsQueued && bIsQueued) return 1;
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
   });
+  const sessionsById = new Map(sortedSessions.map((session) => [session.id, session]));
+  const rows: SessionListRow[] = [];
+  const children = new Map<string, Session[]>();
+  for (const session of sortedSessions) {
+    const parentID = (session.parent_id || '').trim();
+    if (parentID === '' || !sessionsById.has(parentID)) {
+      continue;
+    }
+    const items = children.get(parentID) || [];
+    items.push(session);
+    children.set(parentID, items);
+  }
+  const roots = sortedSessions.filter((session) => {
+    const parentID = (session.parent_id || '').trim();
+    return parentID === '' || !sessionsById.has(parentID);
+  });
+  const appendRows = (session: Session, depth: number) => {
+    rows.push({ session, depth });
+    const nested = children.get(session.id) || [];
+    for (const child of nested) {
+      appendRows(child, depth + 1);
+    }
+  };
+  for (const root of roots) {
+    appendRows(root, 0);
+  }
 
   // Get display title
   const displayTitle = title || (projectId ? getProjectName(projectId) : 'Sessions') || 'Sessions';
@@ -321,13 +357,15 @@ function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) 
             </EmptyState>
           ) : (
             <div className="sessions-list">
-              {sortedSessions.map((session) => {
+              {rows.map(({ session, depth }) => {
                 const isQueued = session.status === 'queued';
                 const isChild = isChildSession(session);
+                const linkLabel = linkTypeLabel(session);
                 return (
                   <div
                     key={session.id}
                     className={`session-card ${isQueued ? 'session-queued' : ''} ${isChild ? 'session-child' : ''}`}
+                    style={depth > 0 ? { marginLeft: `${Math.min(depth, 6) * 18}px` } : undefined}
                     onClick={() => onSelectSession(session.id)}
                   >
                     <div className="session-card-row">
@@ -347,6 +385,7 @@ function SessionsList({ onSelectSession, projectId, title }: SessionsListProps) 
                           aria-label={`Status: ${formatStatusLabel(session.status)}`}
                         />
                         <h3 className="session-name">{formatSessionTitle(session)}</h3>
+                        {linkLabel ? <span className="session-link-type-chip">{linkLabel}</span> : null}
                       </div>
                       <div className="session-row-right">
                         <div className="session-meta">

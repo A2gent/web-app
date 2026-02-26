@@ -81,6 +81,11 @@ type TodoBoard = {
   columns: TodoColumn[];
 };
 
+type SessionListRow = {
+  session: Session;
+  depth: number;
+};
+
 function isTodoFilePath(path: string): boolean {
   const base = path.split('/').filter(Boolean).pop()?.toLowerCase() || '';
   return TODO_FILE_NAMES.has(base);
@@ -2365,6 +2370,11 @@ function ProjectView() {
   };
 
   const isChildSession = (session: Session) => Boolean(session.parent_id);
+  const linkTypeLabel = (session: Session) => {
+    if (session.link_type === 'review') return 'Review';
+    if (session.link_type === 'continuation') return 'Continuation';
+    return '';
+  };
 
   const formatStatusLabel = (status: string) => {
     const normalized = status.trim();
@@ -2396,6 +2406,32 @@ function ProjectView() {
   const sortedSessions = [...sessions].sort((a, b) => {
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
   });
+  const sessionsByID = new Map(sortedSessions.map((session) => [session.id, session]));
+  const childSessions = new Map<string, Session[]>();
+  for (const session of sortedSessions) {
+    const parentID = (session.parent_id || '').trim();
+    if (parentID === '' || !sessionsByID.has(parentID)) {
+      continue;
+    }
+    const items = childSessions.get(parentID) || [];
+    items.push(session);
+    childSessions.set(parentID, items);
+  }
+  const sessionRows: SessionListRow[] = [];
+  const appendSessionRows = (session: Session, depth: number) => {
+    sessionRows.push({ session, depth });
+    const nested = childSessions.get(session.id) || [];
+    for (const nestedSession of nested) {
+      appendSessionRows(nestedSession, depth + 1);
+    }
+  };
+  const rootSessions = sortedSessions.filter((session) => {
+    const parentID = (session.parent_id || '').trim();
+    return parentID === '' || !sessionsByID.has(parentID);
+  });
+  for (const rootSession of rootSessions) {
+    appendSessionRows(rootSession, 0);
+  }
   const fileNameSearchMatches: ProjectFileNameMatch[] = projectSearchResults?.filename_matches || [];
   const contentSearchMatches: ProjectContentMatch[] = projectSearchResults?.content_matches || [];
   const firstSearchHitPath = fileNameSearchMatches[0]?.path || contentSearchMatches[0]?.path || '';
@@ -2889,12 +2925,14 @@ function ProjectView() {
                 </EmptyState>
               ) : (
                 <div className="sessions-list project-sessions-list">
-                  {sortedSessions.map((session) => {
+                  {sessionRows.map(({ session, depth }) => {
                     const isChild = isChildSession(session);
+                    const linkLabel = linkTypeLabel(session);
                     return (
                     <div
                       key={session.id}
                       className={`session-card ${isChild ? 'session-child' : ''}`}
+                      style={depth > 0 ? { marginLeft: `${Math.min(depth, 6) * 18}px` } : undefined}
                       onClick={() => handleSelectSession(session.id)}
                     >
                       <div className="session-card-row">
@@ -2914,6 +2952,7 @@ function ProjectView() {
                             aria-label={`Status: ${formatStatusLabel(session.status)}`}
                           />
                           <h3 className="session-name">{formatSessionTitle(session)}</h3>
+                          {linkLabel ? <span className="session-link-type-chip">{linkLabel}</span> : null}
                         </div>
                         <div className="session-row-right">
                           <div className="session-meta">

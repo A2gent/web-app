@@ -113,6 +113,7 @@ export interface Session {
   id: string;
   agent_id: string;
   parent_id?: string;
+  link_type?: 'review' | 'continuation';
   project_id?: string;
   provider?: string;
   model?: string;
@@ -279,6 +280,8 @@ export interface CreateSessionRequest {
   agent_id?: string;
   task?: string;
   images?: MessageImage[];
+  parent_id?: string;
+  link_type?: 'review' | 'continuation';
   provider?: string;
   model?: string;
   project_id?: string;
@@ -289,6 +292,8 @@ export interface CreateSessionRequest {
 export interface CreateSessionResponse {
   id: string;
   agent_id: string;
+  parent_id?: string;
+  link_type?: 'review' | 'continuation';
   project_id?: string;
   provider?: string;
   model?: string;

@@ -862,6 +862,20 @@ body.mind-resizing * {
   font-size: 12px;
 }
 
+.session-linked-btn {
+  border: 1px solid #3b4351;
+  background: rgba(72, 173, 122, 0.12);
+  color: #9ce7be;
+  border-radius: 12px;
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.session-linked-btn:hover {
+  background: rgba(72, 173, 122, 0.2);
+}
+
 .session-routed-chip {
   background: rgba(72, 173, 122, 0.18);
   color: #9ce7be;
@@ -2446,6 +2460,16 @@ body.mind-resizing * {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.session-link-type-chip {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid #4a4f66;
+  background: rgba(75, 98, 178, 0.22);
+  color: #c9d4ff;
+  white-space: nowrap;
 }
 
 .session-status-dot {
@@ -8231,7 +8255,8 @@ input[type="checkbox"]:disabled {
 }
 
 .form-group select,
-.form-group input {
+.form-group input,
+.form-group textarea {
   width: 100%;
   padding: 10px 12px;
   background: var(--bg, #121417);
@@ -8244,12 +8269,14 @@ input[type="checkbox"]:disabled {
 }
 
 .form-group select:focus,
-.form-group input:focus {
+.form-group input:focus,
+.form-group textarea:focus {
   border-color: var(--primary, #6f8cff);
 }
 
 .form-group select:disabled,
-.form-group input:disabled {
+.form-group input:disabled,
+.form-group textarea:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
